@@ -1,7 +1,7 @@
-ROP:  
+# ROP:  
 	填充空间方法： 1> ida ; 2> gdb.  canary found是，触发check_failed(),ROP失效。  
 
-栈溢出利用：  
+## 栈溢出利用：  
      函数内局部变量利用，可覆盖这函数返回地址(返回地址后4/8个字节要清零) 或者  可以修改该函数内局部变量值。  
      注意：read 读取需要注意读取长度，需覆盖目标字段。fgets gets  
      32bit : ebp + 8h 第一个参数； ebp + 0ch 第二个参数 以此类推 ebp的位置是固定的  
@@ -22,6 +22,22 @@ main函数调 function过程:
 栈溢出：ret -> gets_addr --.bss--> binsh_addr --ret-> system_addr    
 
 
-libc函数利用：  
-	1. 通过栈溢出泄露write,puts的运行地址got。  
-	2. 利用libc里write,puts中的地址， 函数偏移地址不变，得到system的运行地址。  
+## libc函数利用：  
+- 1. 通过栈溢出泄露write,puts的运行地址got。  
+- 2. 利用libc里write,puts中的地址， 函数偏移地址不变，得到system的运行地址。  
+
+## canary
+当函数返回之时检测canary的值是否经过了改变，以此判断stack/buffer overflow 是否发生。
+canary 与 windows下的GS保护都是防止栈溢出的手段。
+### gcc 下使用canary
+-fstatck-protector-*
+-fno-stack-protector
+### canary 实现原理
+![](image/canary_struct.png 'canary struct')
+启用canary，函数体多了几个操作，取fs寄存器0x28处的值，存放在$ebp -0x8/0x4的位置，函数返回之前，再与fs:0x28的值异或。如果canary非法修改，会走__stack_chk_fail(glibc中的函数，打印stack smashing detected),默认延迟绑定。
+解决方法： 劫持__stack_chk_fail的got值劫持流程或者利用__stack_chk_fail泄漏内容。fs寄存器 指向的是当前栈的TLS结构(tcbhead_t结构体），fs:0x28指向的是stack_guard指针(存的是stack_chk_fail)，TLS的值是由security_init进行初始化,
+###canary绕过技术
+canary 设计为以0x00结尾，为了保证截断字符串。
+通过printf或格式化字符串输出canary.
+SSP leak是否能使用跟 glibc 的版本有关。覆盖 __libc_argv[0]的内容，canary出错会打印出来。
+
