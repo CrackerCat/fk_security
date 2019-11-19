@@ -8,4 +8,5 @@
 - distance addr1 addr2  = addr2 - addr1 
 - search -s "target string"
 - vmmap 查看进程中的权限
+- bt backtrace 函数调用路径
 
