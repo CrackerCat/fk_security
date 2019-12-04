@@ -25,3 +25,7 @@ dq 四字单元
 db 字节单元  
 dw 单字单元  
 dd 双字单元  
+
+## disassemble
+* lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]
+* mov eax, dword ptr [12345678]  把内存地址12345678中的双字型（32位）数据赋给eax
