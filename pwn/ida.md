@@ -4,6 +4,7 @@
 - n修改函数名
 - y修改类型
 - shift + f5 导入外部库。
+- ctrl+alt+k 修改汇编，打patch,再点击edit应用patch到input file.
 
 ## flirt
 IDA用于识别库代码序列的一项技术，解决静态链接的问题。模式匹配算法  

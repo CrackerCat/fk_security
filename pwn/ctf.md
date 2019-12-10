@@ -10,8 +10,10 @@
     
   dll = ctypes.cdll.LoadLibrary() 引用动态库。    
     
-  NX保护：栈内代码不可执行。    
-  canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***    
+* NX保护：栈内代码不可执行。    
+* canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***    
+* PIE:地址随机化
+* RELRO: 重定位只读，保护库函数的调用不受攻击者重定向
     
   整型溢出： __int8等赋值修改变量。    
     
@@ -21,7 +23,7 @@
     
   strings -t x 可以查看在文件中字符串的0x偏移量    
   libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()    
-  readelf -s  查找elf中的符号表。    
+  readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .sysmtab(编译时所需符号信息)   
   readelf -S 查看section header的information.  
     
   elf模块： 静态加载ELF文件    
@@ -41,7 +43,7 @@
   linux 延迟绑定PLT    
   动态链接器需要某个函数来完成地址绑定工作，这个函数至少要知道这个地址绑定发生在哪个模块 哪个函数，如lookup(module,function)。    
     
-  在glibc中，lookup的函数真名叫做_dl_runtime_reolve()    
+  在glibc中，lookup的函数真名叫做_dl_runtime_reolve(link_map,rel_offset)    
     
   当我们调用某个外部模块时，调用函数并不直接通过GOT跳转，而是通过一个叫做PLT项的结构来进行跳转，每个外部函数在PLT中都有一个相应的项，比如bar()函数在PLT中的项地址叫做bar@plt，具体实现    
   bar@plt：    
@@ -52,7 +54,36 @@
     
   第一条指令是一条通过GOT间接跳转指令，bar@GOT表示GOT中保存bar()这个函数的相应项。    
   但是为了实现延迟绑定，连接器在初始化阶段没有将bar()地址填入GOT,而是将push n的地址填入到bar@GOT中，所以第一条指令的效果是跳转到第二条指令，相当于没有进行任何操作。第二条指令将n压栈，接着将模块ID压栈，跳转到_dl_runtime_resolve。实际上就是lookup(module,function)的调用。    
-  _dl_runtime_resolve（）在工作完成后将bar()真实地址填入bar@GOT中。    
+  _dl_runtime_resolve（link_map, rel_offset）在工作完成后将bar()真实地址填入bar@GOT中。    
+```
+typedef uint32_t Elf32_Addr;
+typedef uint32_t Elf32_Word;
+typedef struct
+{
+  Elf32_Addr    r_offset;               /* Address */
+  Elf32_Word    r_info;                 /* Relocation type and symbol index */
+} Elf32_Rel;
+#define ELF32_R_SYM(val) ((val) >> 8) #define ELF32_R_TYPE(val) ((val) & 0xff)
+
+typedef struct
+{
+  Elf32_Word    st_name;   /* Symbol name (string tbl index) */
+  Elf32_Addr    st_value;  /* Symbol value */
+  Elf32_Word    st_size;   /* Symbol size */
+  unsigned char st_info;   /* Symbol type and binding */
+  unsigned char st_other;  /* Symbol visibility under glibc>=2.2 */
+  Elf32_Section st_shndx;  /* Section index */
+} Elf32_Sym;
+
+#根据readelf -d得到JMPREL(.rel.plt),readelf -r得到rel_offset,找到重定位条目
+Elf32_Rel * rel_entry = JMPREL + rel_offset;
+#根据*rel_entry*中的符号表条目编号，得到对应的符号信息：
+Elf32_Sym *sym_entry = SYMTAB[ELF32_R_SYM(rel_entry->r_info)];
+#再找到符号信息中的符号名称
+char *sym_name = STRTAB + sym_entry->st_name;
+由此名称，搜索动态库。找到地址后，填充至.got.plt对应位置。最后调整栈，调用这一解析得到的函数。
+
+```
   一旦bar（）解析完毕，再次调用bar@plt时，直接就能跳转到bar()的真实地址。    
     
   PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。    
@@ -95,3 +126,5 @@
   函数指针，可以使用shellcode的地址    
   strcpy, 会将'\x00'也拷贝过去。
   strlen, 遍历到'\x00'终止
+  vmmap 可用来看哪些空间可读写，执行。
+  objdump -d binary 反汇编二进制
