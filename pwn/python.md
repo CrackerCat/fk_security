@@ -1,4 +1,4 @@
-int() str -> int
+int(str, base) str -> int(Dec)  decimal
 
 ## str
 str[begin:end]   str[(-begin):(-end)]  output str   元素不可修改.
@@ -137,3 +137,5 @@ struct.unpack(fmt, string) 将字节流转换为python数据类型，返回一�
 
 ## other
 repr() 将对象转化为供解释器读取的形式，比如存在不可打印字符的字符串。
+右侧对齐(左侧填充)： str.rjust(width, char)    str.zfill(width)
+左侧对齐(右侧填充)： str.ljust(width, char)

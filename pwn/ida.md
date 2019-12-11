@@ -3,7 +3,9 @@
 - f5反汇编
 - n修改函数名
 - y修改类型
+- x跟踪变量引用
 - shift + f5 导入外部库。
+- shift + f12 打开string window。
 - ctrl+alt+k 修改汇编，打patch,再点击edit应用patch到input file.
 
 ## flirt
@@ -19,4 +21,3 @@ IDA自带的签名文件保存在 IDADIR/sig目录，大多数是windows编译�
 注： sigmake 出错时，修改exc文件，将上面的注释删掉，取部分冲突函数，在它们前面加 '+'  
 ### 查找版本信息
 strings -a binary |grep GCC  
-

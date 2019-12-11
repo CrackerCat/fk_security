@@ -11,7 +11,7 @@
 
 ## disassemble
 32bit: leave = mov esp ebp; pop ebp; 清除栈空间，弹出ebp  
-       retn = pop ip; pc 是非intel厂家对IP的称呼，和 CS:IP一样 
+retn = pop ip; pc 是非intel厂家对IP的称呼，和 CS:IP一样 
 return 0; =  leave ; retn  
 
 ## linux下的段：  
@@ -35,7 +35,8 @@ return 0; =  leave ; retn
 x86_64(ia32的64bit扩展): return value 使用寄存器的值当做返回值， 使用栈存储返回地址。  
 ARM：使用R0 传递函数返回值。 LR寄存器 存储 函数结束之后的返回地址。  
 ia32: intel architeture 32 bit
-##ia32_register
+
+## ia32_register
 ![](image/IA32_register.png "IA32 register")
 方便处理byte,word,double word类型的数据,eax, ax, al 都不一样
 
