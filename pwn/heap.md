@@ -142,7 +142,6 @@ ptmalloc 为了提高分配的速度，会把一些小的 chunk 先放到 fast b
 ### fast bin  
 glibc 采用单向链表对每个 fast bin 进行组织，并且每个 bin 采取 LIFO 策略，最近释放的 chunk 会更早地被分配.ptmalloc 默认情况下会调用 set_max_fast(s) 将全局变量 global_max_fast 设置为 DEFAULT_MXFAST，也就是设置 fast bins 中 chunk 的最大值。  
 # define DEFAULT_MXFAST (64 * SIZE_SZ / 4) ->  64 * SIZE_SZ/4 - SIZE_SZ*2 是最大长度, 64bit=0x70 32bit=0x38  
-### fast bin  
 ### small bin  
 chunk size 小于 512 byte  
 每个 chunk 的大小与其所在的 bin 的 index 的关系为：chunk_size = 2 * SIZE_SZ *index  
@@ -181,18 +180,16 @@ fastbin 范围的 chunk 释放后会被置入 fastbin 链表中，而不处于�
 ### heap_info  
 程序刚开始执行时，每个线程是没有 heap 区域的。当其申请内存时，就需要一个结构来记录对应的信息(描述堆的基本信息)，而 heap_info 的作用就是这个.该数据结构是专门为从 Memory Mapping Segment 处申请的内存准备的，即为非主线程准备的。  
 ### heap_info   
-程序刚开始执行时，每个线程是没有 heap 区域的。当其申请内存时，就需要一个结构来记录对应的信息(描述堆的基本信息)，而 heap_info 的作用就是这个.该数据结构是专门为从 Memory Mapping Segment 处申请的内存准备的，即为非主线程准备的。  
-```  
 typedef struct _heap_info  
 {  
-  mstate ar_ptr; /* Arena for this heap. */  
-  struct _heap_info *prev; /* Previous heap. */  
-  size_t size;   /* Current size in bytes. */  
-  size_t mprotect_size; /* Size in bytes that has been mprotected  
-                           PROT_READ|PROT_WRITE.  */  
-  /* Make sure the following data is properly aligned, particularly  
-     that sizeof (heap_info) + 2 * SIZE_SZ is a multiple of  
-     MALLOC_ALIGNMENT. */  
+mstate ar_ptr; /* Arena for this heap. */  
+struct _heap_info *prev; /* Previous heap. */  
+size_t size;   /* Current size in bytes. */  
+size_t mprotect_size; /* Size in bytes that has been mprotected  
+PROT_READ|PROT_WRITE.  */  
+/* Make sure the following data is properly aligned, particularly  
+that sizeof (heap_info) + 2 * SIZE_SZ is a multiple of  
+MALLOC_ALIGNMENT. */  
 ### malloc_state  
 该结构用于管理堆，记录每个 arena 当前申请的内存的具体状态。  
 无论是 thread arena 还是 main arena，它们都只有一个 malloc state 结构。由于 thread 的 arena 可能有多个，malloc state 结构会在最新申请的 arena 中。  
@@ -202,37 +199,37 @@ typedef struct _heap_info
 struct malloc_state {  
 /* Serialize access.  */  
 __libc_lock_define(, mutex);  
-    /* Serialize access.  */  
+/* Serialize access.  */  
 /* Flags (formerly in max_fast).  */  
 int flags;  
-    /* Flags (formerly in max_fast).  */  
+/* Flags (formerly in max_fast).  */  
 /* Fastbins */  
 mfastbinptr fastbinsY[ NFASTBINS ];  
-    /* Fastbins */  
+/* Fastbins */  
 /* Base of the topmost chunk -- not otherwise kept in a bin */  
 mchunkptr top;  
-    /* Base of the topmost chunk -- not otherwise kept in a bin */  
+/* Base of the topmost chunk -- not otherwise kept in a bin */  
 /* The remainder from the most recent split of a small request */  
 mchunkptr last_remainder;  
-    /* The remainder from the most recent split of a small request */  
+/* The remainder from the most recent split of a small request */  
 /* Normal bins packed as described above */  
 mchunkptr bins[ NBINS * 2 - 2 ];  
-    /* Normal bins packed as described above */  
+/* Normal bins packed as described above */  
 /* Bitmap of bins, help to speed up the process of determinating if a given bin is definitely empty.*/  
 unsigned int binmap[ BINMAPSIZE ];  
-    /* Bitmap of bins, help to speed up the process of determinating if a given bin is definitely empty.*/  
+/* Bitmap of bins, help to speed up the process of determinating if a given bin is definitely empty.*/  
 /* Linked list, points to the next arena */  
 struct malloc_state *next;  
-    /* Linked list, points to the next arena */  
+/* Linked list, points to the next arena */  
 /* Linked list for free arenas.  Access to this field is serialized  
 by free_list_lock in arena.c.  */  
 struct malloc_state *next_free;  
-       by free_list_lock in arena.c.  */  
+by free_list_lock in arena.c.  */  
 /* Number of threads attached to this arena.  0 if the arena is on  
 the free list.  Access to this field is serialized by  
 free_list_lock in arena.c.  */  
 INTERNAL_SIZE_T attached_threads;  
-       free_list_lock in arena.c.  */  
+free_list_lock in arena.c.  */  
 /* Memory allocated from the system in this arena.  */  
 INTERNAL_SIZE_T system_mem;  
 INTERNAL_SIZE_T max_system_mem;  
@@ -255,16 +252,16 @@ ptmalloc 通过 chunk header 的数据判断 chunk 的使用情况和对 chunk �
 可以控制 chunk 中的内容。如果 chunk 存在字符串指针、函数指针等，就可以利用这些指针来进行信息泄漏和控制执行流程。  
 - 对inuse fastbin 进行extend  
 可以控制 chunk 中的内容。如果 chunk 存在字符串指针、函数指针等，就可以利用这些指针来进行信息泄漏和控制执行流程。  
-- 对inuse fastbin 进行extend
+- 对inuse fastbin 进行extend  
 int main(void)  
 {  
 void *ptr,*ptr1;  
-{
+{  
 ptr=malloc(0x10);//分配第一个0x10的chunk  
 malloc(0x10);//分配第二个0x10的chunk  
-    ptr=malloc(0x10);//分配第一个0x10的chunk
+ptr=malloc(0x10);//分配第一个0x10的chunk  
 *(long long *)((long long)ptr-0x8)=0x41;// 修改第一个块的size域  
-
+    ptr=malloc(0x10);//分配第一个0x10的chunk
 free(ptr);  
 ptr1=malloc(0x30);// 实现 extend，控制了第二个块的内容  
 - inuse smallbin 进行 extend  
@@ -287,24 +284,24 @@ ptr1=malloc(0xa0);
 - 对free的small bin 进行extend  
 - 对free的small bin 进行extend  
 - 对free的small bin 进行extend  
+- 对free的small bin 进行extend  
+- 对free的small bin 进行extend  
 
-- 对free的small bin 进行extend
-```
-int main()
+int main()  
+{  
+void *ptr,*ptr1;  
 {
-    void *ptr,*ptr1;
-
+ptr=malloc(0x80);//分配第一个0x80的chunk1  
+malloc(0x10);//分配第二个0x10的chunk2  
     ptr=malloc(0x80);//分配第一个0x80的chunk1
-    malloc(0x10);//分配第二个0x10的chunk2
+free(ptr);//首先进行释放，使得chunk1进入unsorted bin ,下一个chunk size的prev_size域置0.  
 
-    free(ptr);//首先进行释放，使得chunk1进入unsorted bin ,下一个chunk size的prev_size域置0.
-
-    *(int *)((int)ptr-0x8)=0xb1;
-    ptr1=malloc(0xa0);
+*(int *)((int)ptr-0x8)=0xb1;  
+ptr1=malloc(0xa0);  
 - 通过extend 前向overlapping  
 通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
 前向 extend 利用了 smallbin 的 unlink 机制，通过修改 pre_size 域可以跨越多个 chunk 进行合并实现 overlapping。  
-- 通过extend 前向overlapping
+- 通过extend 前向overlapping  
 通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
 int main(void)  
 {  
@@ -319,6 +316,8 @@ free(ptr1);
 *(int *)((long long)ptr4-0x10)=0xd0;//修改pre_size域  
 free(ptr4);//unlink进行前向extend  
 malloc(0x150);//占位块  
+free(ptr4);//unlink进行前向extend  
+}  
     free(ptr4);//unlink进行前向extend
 }  
 

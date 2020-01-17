@@ -47,3 +47,6 @@ logical right shift: fill 0
 arithmetic right shift: fill 最高位.  
 对于无符号数，右移填充0.对于有符号数，右移可能是logical shift也或者是 arithmetic shift，大多数情况是算术右移，Java中明确规定了，c语言未明确规定右移采取哪种方式。  
 
+### function return value  
+* 32bit: 存放在eax中  
+* 64bit: 高位存放在edx,低位存放在eax  
