@@ -10,7 +10,7 @@ sendlineafter() =  recvuntil() + sendline()
     
 dll = ctypes.cdll.LoadLibrary() 引用动态库。  
     
-* NX保护：栈内代码不可执行。  
+* NX(no-execute)保护：栈内代码不可执行,是在硬件上实现的。  
 * canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
 * PIE:地址随机化  
 * RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
@@ -19,7 +19,7 @@ dll = ctypes.cdll.LoadLibrary() 引用动态库。
     
 'x41' ='a'  
     
-system的参数，可以通过gets，read读取任意字符串设置。  
+system的参数，可以通过gets，read, strcpy, strcat, sprintf读取任意字符串设置。  
     
 strings -t x 可以查看在文件中字符串的0x偏移量  
 libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()  

@@ -8,6 +8,8 @@
 - distance addr1 addr2  = addr2 - addr1  
 - search -s "target string"  
 - vmmap 查看进程中的权限及地址范围  
-- bt backtrace 函数调用路径,可查看当前运行到哪一行  
+- bt backtrace 函数调用路径,可查看当前运行到哪一行
+- break line-or-function if expr 条件断点
 - set var $reg/addr=value  修改变量值  
 - list <linenum>/<function>/<first>,<last>/,<last>/-/+/empty  显示源代码(-g)  
+- until 执行完一次循环
