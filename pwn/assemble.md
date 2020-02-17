@@ -14,9 +14,15 @@
 * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
 * jg 前大于后
 * jge 前大于等于后
-* cmp des src: 比较整数，des-src,修改标志位，不修改任何操作数  
-* add des src
+* cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
+* add src des <=> des = des + src
 * rep ret 解决ret的分支预测问题。 [rep详解](http://repzret.org/p/repzret/ "rep")
+* cltq %eax->%rax的符号拓展转换 <=> movslq(s符号 l双字  q四字) %eax,%rax
+### 几个术语
+* 字节：8位，后缀：b
+* 字：16位，后缀：w
+* 双字：32位，后缀：l
+* 四字：64位，后缀：q
 
 ---
 ## disaseembly syntax
@@ -79,7 +85,7 @@ arithmetic right shift: fill 最高位.
 
 ### function return value  
 * 32bit: 存放在eax中  
-* 64bit: 高位存放在edx,低位存放在eax  
+* 64bit: 高位存放在edx,低位存放在eax/存放在rax中  
 
 ### data alignment
 * 存储地址是2的倍数意味着地址最低一位为0.存储地址是4的倍数意味着地址最低两位为0.其他同理。
@@ -96,4 +102,3 @@ struct S1 e;
 struct S2 d[4];
 ```
   在上述代码中，e占9字节，而d数组中元素占12字节，需要考虑每个元素的对齐。
-
