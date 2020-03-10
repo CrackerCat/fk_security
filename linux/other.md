@@ -5,9 +5,11 @@ nmap -sn ip/netmask_bits  扫描网段主机状态
 ## netfilter  
 netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netfilter系统缺省的表是filter，该表包含INPUT,FORWARD和OUTPUT.  
 
-iptables是一个内核包过滤工具，最终执行这些过滤规则的是netfilter.  
-iptable -I INPUT -s ip -j DROP  //insert rule  
-iptable -D INPUT -s ip -j DROP  //delete rule  
+- iptables是一个内核包过滤工具，最终执行这些过滤规则的是netfilter.  
+- iptable -I INPUT -s ip -j DROP  //insert rule  
+- iptable -D INPUT -s ip -j DROP  //delete rule
+- iptables -L -n 打印规则
+- 
 
 # ssh -X  
 ## windows connect to linux  
