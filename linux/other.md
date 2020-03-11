@@ -13,7 +13,8 @@ netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netf
 ## route
 配置kernel ip table。
 
-- route add/del -net destination gw output_ip 
+- route add/del -net destination gw output_ip 添加路由项 
+- route -n 打印路由表
 
 # ssh -X  
 ## windows connect to linux  
