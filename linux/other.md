@@ -37,4 +37,4 @@ iconv -f gb2312 -t utf-8 1.txt> 2.txt
 2. fdisk /dev/sda 物理格式化  
 3. partprobe 更新分区表  
 4. mkfs.ext3 /dev/sda* 创建ext3 fs  
-5. 根据blkid输出值，修改/etc/fstab  
+5. 根据blkid输出值，修改/etc/fstab，添加/dev/sda* mount_point ext4 defaults 0 0
