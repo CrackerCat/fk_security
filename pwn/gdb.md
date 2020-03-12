@@ -13,3 +13,8 @@
 - set var $reg/addr=value  修改变量值  
 - list <linenum>/<function>/<first>,<last>/,<last>/-/+/empty  显示源代码(-g)  
 - until 执行完一次循环
+- call func(para list)  调用函数
+- display expression  在每一次单步调试都会打印expression的值
+- watch expression 一旦表达式的值改变就会中止程序
+- info locals
+- 
