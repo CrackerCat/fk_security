@@ -1,0 +1,602 @@
+From ca95d6c3d8bb8d5fa159498aa149725345fa3979 Mon Sep 17 00:00:00 2001
+From: lyz_cs <lyz_cs@pku.edu.cn>
+Date: Fri, 13 Mar 2020 22:50:21 +0800
+Subject: [PATCH] update
+
+---
+ compiler/cmake.md    | 26 ++++++++++++++++
+ compiler/llvm.md     |  3 ++
+ linux/git.md         | 16 +++++++---
+ linux/kernel.md      | 88 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ linux/linux.md       | 14 +++++++++
+ linux/makefile.md    |  3 ++
+ linux/vim.md         |  6 ++--
+ office/markdown.md   | 10 +++---
+ office/other.md      |  6 ++--
+ pwn/README.md        | 12 +++----
+ pwn/assemble.md      | 78 +++++++++++++++++++++++-----------------------
+ pwn/csapp.md         | 78 +++++++++++++++++++++++-----------------------
+ pwn/gcc.md           |  6 ++--
+ pwn/gdb.md           |  6 ++--
+ pwn/stackoverflow.md |  6 ++--
+ reverse/c.md         |  4 +--
+ web/phpstudy.md      |  4 +--
+ web/web.md           | 12 +++----
+ 18 files changed, 259 insertions(+), 119 deletions(-)
+ create mode 100644 compiler/cmake.md
+ create mode 100644 compiler/llvm.md
+ create mode 100644 linux/kernel.md
+ create mode 100644 linux/linux.md
+ create mode 100644 linux/makefile.md
+
+diff --git a/compiler/cmake.md b/compiler/cmake.md
+new file mode 100644
+index 0000000..fb6a1f6
+--- /dev/null
++++ b/compiler/cmake.md
+@@ -0,0 +1,26 @@
++# cmake  
++## command  
++- file 文件操作命令 例如 file(COPY files DESTINATION dir)  
++- add_library ( <library name> [STATIC | SHARED | MODULE] [EXCLUDE_FROM_ALL] source1... ) 其中EXCLUDE_FROM_ALL表示默认不会构建，除非被其他组件依赖. 主要作用是将指定源文件生成链接文件。  
++- link_directories() 指定要链接的库文件的路径  
++- target_link_libraries() 将库文件与库文件链接  
++- add_executable(name source1...) 为工程引入一个可执行文件 , 一般后面紧跟target_link_libraries()  
++- message() 打印  
++- add_subdirectory(source_dir [binary_dir] [EXCLUDE_FROM_ALL]) 将外部项目文件夹(含有CMakeLists.txt)加入build任务列表中。若未指定binary_dir(输出文件的位置)，则它等于source_dir。  
++---  
++## macro  
++usage: ${macro name}。在if中直接使用变量名。  
++- PROJECT_SOURCE_DIR 源代码 <- cmake ..  
++- PROJECT_BINARY_DIR 二进制 <- 当前路://cmake.org/documentation径  
++- <projectname>_BINARY_DIR 和<projectname>_SOURCE_DIR 两个隐式变量。  
++- EXECUTABLE_OUTPUT_PATH 二进制存放位置  
++- LIBRARY_OUTPUT_PATH 目标链接文件存放位置  
++- CMAKE_C_FLAGS = ADD_DEFINITIONS() 设置C编译选项  
++- CMAKE_CXX_FLAGS = ADD_DEFINITIONS() 设置C++编译选项  
++## logical expression  
++logical expression 用来创建条件输出。  
++- $<TARGET_OBJECT:objLib> objLib构建过程产生的目标文件列表。objLib 必须是OBJECT_LIBRARY的一个目标文件。这个表达式只能在add_library或者add_executable()中使用。  
++---  
++## documentation  
++url: https://cmake.org/documentation  
++
+diff --git a/compiler/llvm.md b/compiler/llvm.md
+new file mode 100644
+index 0000000..4e36504
+--- /dev/null
++++ b/compiler/llvm.md
+@@ -0,0 +1,3 @@
++# llvm  
++## llvm pass  
++能够将代码进行转化和优化，所有pass都是Pass类的子类。通过覆盖Pass类的虚函数来实现功能。  
+diff --git a/linux/git.md b/linux/git.md
+index 56d67f7..5c81a1a 100644
+--- a/linux/git.md
++++ b/linux/git.md
+@@ -1,10 +1,16 @@
+-# git
+-- .gitignore 文件可以在任意文件夹中创建
++# git  
++- .gitignore 文件可以在任意文件夹中创建  
++- git remote -v 查看远程的信息  
++- 远程仓库的默认名称是origin  
++- git的tag是版本库的快照,是指向某一个commit的指针,一个tag对应一个commit.  
++- git tag "tag" ["commit id" 打标签  
++- git diff "tag1" "tag2"  
++- git reset  
+ ## markdown syntax  
+ - 两个空格表示换行。  
+ - # 一级标题、## 二级标题 以此类推。  
+ - ![](image path "text") 显示图片。  
+-- \- text 表示 * text 可以用来列举每个要点。  
++- - text 表示 * text 可以用来列举每个要点。  
+ - **text** 加租字体  
+-- ```code block```
+-- * 列表和缩进
++- ```code block```  
++- * 列表和缩进  
+diff --git a/linux/kernel.md b/linux/kernel.md
+new file mode 100644
+index 0000000..2ca7cf7
+--- /dev/null
++++ b/linux/kernel.md
+@@ -0,0 +1,88 @@
++## 内核源码树的根目录：  
++
++arch 特定架构的源码  
++block  
++crypto 加密API  
++Documentation 内核源码文档  
++drivers 设备驱动程序  
++firmware 使用某些程序所需的设备固件  
++init  内核引导和初始化  
++ipc  进程间通信代码  
++kenel 像调度程序这样的核心子程序  
++lib 通用内核函数  
++mm 内存管理和VM  
++samples 示例代码  
++script 编译内核所用的脚本  
++sound 语音子系统  
++tools 在linux开发中有用的工具  
++virt  虚拟化基础结构  
++CREDITS 开发者列表  
++Makefile 基本内核的Makefile  
++
++## 内核编译：  
++
++make config : 配置需要编译哪些模块。  
++2.6以后的内核，代码之间的依赖关系会自动维护(无需make dep命令)。  
++make -jn  不正确的依赖可能导致编译过程出错。  
++
++## 安装内核：  
++
++make modules_install 将编译的模块安装到 /lib/modules  
++编译时也会在内核代码树的根目录创建一个system.map符号对照表，将内核符号和它们的起始地址对应起来，调试用。  
++
++## 内核开发：  
++
++内核不能访问c库和c标准头文件，因为c库太大且低效，所以重新实现。  
++必须使用GNU C  
++缺乏内存保护机制。  
++难以执行浮点运算。  
++注意同步和并发。  
++考虑移植的重要  
++容量小且固定的内核栈，用户空间的栈巨大, x86的栈编译时配置大小，进程的内核栈的大小一般是两页。x86三级页表，默认4k页长。  
++内核的内存不分页  
++    
++## 头文件：  
++
++include/*  
++arch/<architecture>/include/asm  
++    
++printk() 可以指定优先级，如 KERN_ERR宏  
++    
++## 进程：  
++
++进程退出执行后被设置为僵死状态，直到父进程执行wait()或waitpid()  
++task == 进程  
++x86(寄存器少）: thread_info 结构位于内核栈的尾端分配，少一个寄存器，便于用偏移量访问，所以它必须是task_strcut的第一个元素。  
++进程状态切换： fork()创建一个进程，进入TASK_RUNNNING ,经过schedule()函数调用context_switch() ，进入 TASK_RUNNING  
++-> do_exit() 结束  
++-> 优先级高任务抢占， 进入 就绪状态 TASK_RUNNING  
++-> 等待某种特定事件 ，进入TASK_INTERRUPTIBLE 或 TASK_UNINTERRUPTIBLE ，满足条件后 进入就绪状态。  
++x86 current_thread_info: sp & ~(thread_size - 1)  
++
++### 进程创建  
++由fork和exec两个函数实现。  
++写时拷贝, 父进程和子进程共享同一个拷贝，只有在需要写入的时候，数据才会被复制。也就是资源在写之前是以只读的方式共享。  
++#### fork  
++fork的实际开销就是复制整个父进程的页表和给字进程创建唯一的进程描述符。一般fork后马上exec。  
++
++## 进程家族树：  
++
++所有进程都pid = 1的 init进程的后代.init 读取 initscript并执行其他的相关的程序。init进城的进程描述符由init_task静态分分配。  
++进程task_struct都有一个parent, list子进程。任务队列是一个双向的循环的的链表。list_entry(),  
++   
++## security  
++security.c中 security_ops 指向哪个就是使用哪个安全模块(security,smash,tomoyo).  
++
++## 杂项：  
++- powerpc: IBM基于RISC的现代微处理器。  
++- ppc: 有足够多的寄存器。  
++-  __builtin_expect() 是 GCC (version >= 2.96）提供给程序员使用的，目的是将分支转移的信息提供给编译器，这样编译器可以对代码进行优化，以减少指令跳转带来的性能下降。通过这种方式，编译器在编译过程中，会将可能性更大的代码紧跟着起面的代码，从而减少指令跳转带来的性能上的下降。  
++```
++#define likely(x) __builtin_expect(!!(x), 1) //x很可能为真       
++#define unlikely(x) __builtin_expect(!!(x), 0) //x很可能为假
++```
++- EFI ：和BIOS一样，用于启动过程中完成硬件初始化。UEFI具有安全启动, 主板根据TPM记录硬件签名对各硬件判断，只有符合认证的硬件驱动才会被加载.  
++
++# linux0.11  
++## document link  
++* 实验环境搭建与调试： https://blog.csdn.net/longintchar/article/details/79685055  
+diff --git a/linux/linux.md b/linux/linux.md
+new file mode 100644
+index 0000000..30ba242
+--- /dev/null
++++ b/linux/linux.md
+@@ -0,0 +1,14 @@
++# linux  
++## Ubuntu  
++### dpkg  
++一种原始的包管理工具，主要由Debian系列的系统使用。类似的工具，在centos系列中有rpm。  
++- dpkg -i install  
++- dpkg -r remove  
++- dpkg -l list all  
++- dpkg -L list file of deb  
++- dpkg -S list deb owner of file  
++---  
++### apt  
++基于dpkg支持自动解决依赖的包管理工具。  
++- /etc/apt/source.list 软件包来源  
++- /etc/apt/apt.conf.d  
+diff --git a/linux/makefile.md b/linux/makefile.md
+new file mode 100644
+index 0000000..0198dc9
+--- /dev/null
++++ b/linux/makefile.md
+@@ -0,0 +1,3 @@
++# makefile
++## grammar
++- .PHONY: object object如果不是文件,则会出现"up to date".因此需要这个声明。
+diff --git a/linux/vim.md b/linux/vim.md
+index 5ed305b..fe5f9c6 100644
+--- a/linux/vim.md
++++ b/linux/vim.md
+@@ -26,7 +26,7 @@
+ - ctrl + h 删除前一个字符  
+ - ctrl + w 删除前一个单词  
+ 
+-#view mode
+-- y 复制
+-- p 粘贴
++# view mode  
++- y 复制  
++- p 粘贴  
+ 
+diff --git a/office/markdown.md b/office/markdown.md
+index f749825..7e4c4ff 100644
+--- a/office/markdown.md
++++ b/office/markdown.md
+@@ -1,5 +1,5 @@
+-# markdown
+-* [链接文字](链接地址 "标题") 插入链接
+-* ![alt text](图片相对路径/绝对路径 "title") 插入图片
+-* --- 分割线
+-* **文字** 加粗
++# markdown  
++* [链接文字](链接地址 "标题") 插入链接  
++* ![alt text](图片相对路径/绝对路径 "title") 插入图片  
++* --- 分割线  
++* **文字** 加粗  
+diff --git a/office/other.md b/office/other.md
+index bee033e..0fdecc6 100644
+--- a/office/other.md
++++ b/office/other.md
+@@ -1,3 +1,3 @@
+-#other
+-## 大文件邮件发送
+-- 文叔叔-传文件 网站，类似百度网盘，可以生成一个链接(不限速！！！).
++# other  
++## 大文件邮件发送  
++- 文叔叔-传文件 网站，类似百度网盘，可以生成一个链接(不限速！！！).  
+diff --git a/pwn/README.md b/pwn/README.md
+index b48ba23..61a3545 100644
+--- a/pwn/README.md
++++ b/pwn/README.md
+@@ -1,6 +1,6 @@
+-# pwn
+-## test
+-  这个目录包含一些unit test文件，对一些难以理解的概念进行验证。
+-  cmake工具管理这些源文件，通过创建ninja.build配置文件，使得ninja编译代码更加快速。
+-  编译步骤如下。
+-- mkdir build.ninja && cmake .. -G Ninja && ninja
++# pwn  
++## test  
++这个目录包含一些unit test文件，对一些难以理解的概念进行验证。  
++cmake工具管理这些源文件，通过创建ninja.build配置文件，使得ninja编译代码更加快速。  
++编译步骤如下。  
++- mkdir build.ninja && cmake .. -G Ninja && ninja  
+diff --git a/pwn/assemble.md b/pwn/assemble.md
+index 7895486..1675102 100644
+--- a/pwn/assemble.md
++++ b/pwn/assemble.md
+@@ -1,57 +1,57 @@
+-# assembly language
+-主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.
++# assembly language  
++主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.  
+ 
+----
++---  
+ ## assemble instruction  
+ * nop : 空操作指令 延时一个机器周期。  
+ * push ax;  送入栈中，sp - 1  
+ * pop ax; $sp -> ax,sp + 1  
+ * movl src dst   四字节  
+ * movl $-8192, %eax  将栈底四字节 移到 eax   $ = 0xffffffff  
+-* movl %eax, 4(%edx) 将%edx + 4地址中的内容 移入 %eax
++* movl %eax, 4(%edx) 将%edx + 4地址中的内容 移入 %eax  
+ * lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]  
+ * mov dword ptr [12345678],eax  把内存地址12345678中的双字型（32位）数据赋给eax  
+ * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
+-* jg 前大于后
+-* jge 前大于等于后
++* jg 前大于后  
++* jge 前大于等于后  
+ * cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
+-* add src des <=> des = des + src
+-* rep ret 解决ret的分支预测问题。 [rep详解](http://repzret.org/p/repzret/ "rep")
+-* cltq %eax->%rax的符号拓展转换 <=> movslq(s符号 l双字  q四字) %eax,%rax
+-### 几个术语
+-* 字节：8位，后缀：b
+-* 字：16位，后缀：w
+-* 双字：32位，后缀：l
+-* 四字：64位，后缀：q
++* add src des <=> des = des + src  
++* rep ret 解决ret的分支预测问题。 [rep详解](http://repzret.org/p/repzret/ "rep")  
++* cltq %eax->%rax的符号拓展转换 <=> movslq(s符号 l双字  q四字) %eax,%rax  
++### 几个术语  
++* 字节：8位，后缀：b  
++* 字：16位，后缀：w  
++* 双字：32位，后缀：l  
++* 四字：64位，后缀：q  
+ 
+----
+-## disaseembly syntax
+-- $ 当前正汇编到的指令在代码段中的偏移量; 也可用于表达式。
++---  
++## disaseembly syntax  
++- $ 当前正汇编到的指令在代码段中的偏移量; 也可用于表达式。  
+ 
+----
++---  
+ ## disassemble  
+ 32bit: leave = mov esp ebp; pop ebp; 清除栈空间，弹出ebp  
+ retn = pop ip; pc 是非intel厂家对IP的称呼，和 CS:IP一样  
+ return 0; =  leave ; retn  
+ 
+----
++---  
+ ## linux下的段：  
+ * .text,存放编译后的机器指令。  
+ * .bss段(rw),数据不包含再可执行程序中，在文件中不占据空间，存放未初始化的全局变量和局部静态变量，而.data段相反，且必须被初始化,存放已初始化的全局变量和局部静态变量。  
+ * .rodata段(r), 存放字符串常量。  
+ * 进程逻辑地址低到高地址：其他 .text  .rodata  .data 其他 HEAP 其他  STACK  
+ 
+----
++---  
+ ## linux assemble:  
+-* as AT&T assembler
+-  * as -o file.o file.s --64
+-  * ld -m elf_x86_64 file.o -o file 
++* as AT&T assembler  
++* as -o file.o file.s --64  
++* ld -m elf_x86_64 file.o -o file  
+ * ld  
+-* nasm Intel assembler
+-  * nasm -f elf64 file.asm
+-  * ld -s -o file file.o
++* nasm Intel assembler  
++* nasm -f elf64 file.asm  
++* ld -s -o file file.o  
+ 
+----
++---  
+ ## data type  
+ * dq 四字单元  
+ * db 字节单元  
+@@ -59,7 +59,7 @@ return 0; =  leave ; retn
+ * dd 双字单元  
+ 数据访问方式:immediate, register, memory.  
+ 
+----
++---  
+ ## architecture  
+ x86_64(ia32的64bit扩展): return value 使用寄存器的值当做返回值，减少从内存读取和写操作， 使用栈存储返回地址。  
+ ARM：使用R0 传递函数返回值。 LR寄存器 存储 函数结束之后的返回地址。  
+@@ -69,13 +69,13 @@ ia32: intel architeture 32 bit
+ ![](image/IA32_register.png "IA32 register")  
+ 方便处理byte,word,double word类型的数据,eax, ax, al 都不一样  
+ 
+-## x86_i64 register
+-![](image/x86_64_register.png "x86_64 register")
+-64bit: %rax, %rdx, %rdx, %rbx, %rsi, %rdi, %rsp, %rbp, %r8-%r15.
+-访问低32bit/16bit/8bit register可以直接访问, 跟ia32类似,例如 %eax/%ax/%al.
++## x86_i64 register  
++![](image/x86_64_register.png "x86_64 register")  
++64bit: %rax, %rdx, %rdx, %rbx, %rsi, %rdi, %rsp, %rbp, %r8-%r15.  
++访问低32bit/16bit/8bit register可以直接访问, 跟ia32类似,例如 %eax/%ax/%al.  
+  
+ 
+----
++---  
+ ## other  
+ ### shift  
+ left shift: fill 0  
+@@ -87,11 +87,11 @@ arithmetic right shift: fill 最高位.
+ * 32bit: 存放在eax中  
+ * 64bit: 高位存放在edx,低位存放在eax/存放在rax中  
+ 
+-### data alignment
+-* 存储地址是2的倍数意味着地址最低一位为0.存储地址是4的倍数意味着地址最低两位为0.其他同理。
+-* linux中，short 2字节对齐；int,int*,float,double 四字节对齐。
+-* windows中，大多数情况，k字节的对象的地址必须是k的倍数。
+-* 汇编语法: .align number 
++### data alignment  
++* 存储地址是2的倍数意味着地址最低一位为0.存储地址是4的倍数意味着地址最低两位为0.其他同理。  
++* linux中，short 2字节对齐；int,int*,float,double 四字节对齐。  
++* windows中，大多数情况，k字节的对象的地址必须是k的倍数。  
++* 汇编语法: .align number  
+ ```c
+ struct S2 {
+   int i;
+@@ -101,4 +101,4 @@ struct S2 {
+ struct S1 e;
+ struct S2 d[4];
+ ```
+-  在上述代码中，e占9字节，而d数组中元素占12字节，需要考虑每个元素的对齐。
++在上述代码中，e占9字节，而d数组中元素占12字节，需要考虑每个元素的对齐。  
+diff --git a/pwn/csapp.md b/pwn/csapp.md
+index b50c61f..5d49910 100644
+--- a/pwn/csapp.md
++++ b/pwn/csapp.md
+@@ -1,40 +1,40 @@
+-# csapp
+-  csapp 中一些难以理解或易忘记的点，在此纪录。
+-## linker
+-  linker 可以把许多文件 组合成单个可执行文件。
+-### 1. advantages
+-- 学习linker 可以帮助你解决一些由于缺失模块导致链接错误的问题。
+-- 帮助理解作用域怎么实现的。
+-- 理解其他重要的系统概念。
+-### 2. main tasks
+-- Symbol resolution. 将符号与符号定义关联。
+-- relocation. 将符号定义与内存位置关联。
++# csapp  
++csapp 中一些难以理解或易忘记的点，在此纪录。  
++## linker  
++linker 可以把许多文件 组合成单个可执行文件。  
++### 1. advantages  
++- 学习linker 可以帮助你解决一些由于缺失模块导致链接错误的问题。  
++- 帮助理解作用域怎么实现的。  
++- 理解其他重要的系统概念。  
++### 2. main tasks  
++- Symbol resolution. 将符号与符号定义关联。  
++- relocation. 将符号定义与内存位置关联。  
+ 
+-### 3. object files
+-- relocatable object file(compiler and assembler产生). 用来创建executable object file.
+-- executable object file(linker). 可以执行
+-- shaired object file. 可以被装载和动态链接的目标文件。
+-#### relocatable object file
+-ELF, executable and linkable file.
+-ELF header, 头16字节是字长和字节序列.其他部分包含ELF大小、目标文件类型、机器类型、section header表的偏移以及它中入口的大小和数量。
+-##### sections
+-- .symtab, 一个包含函数和全局变量的符号表, 不含有局部变量的入口.
+-- .rel.text, .text中的位置列表, 引用外部函数或外部全局变量的指令需要修改。通常在executable object file 删掉了.rel.text
+-- .rel.data, 全局变量的重定位信息.
+-- .debug, -g 参数产生这个调试符号表.
+-- .line, c源程序中的行号与.text中的指令的映射。-g 参数才有这个section.
+-- .strtab, 符号表的字符串表。
+-### 4. symbol and symbol tables
+-static 限定的局部变量不是由栈管理的。
+-有一个Elf_Symbol结构体.
+-![](image/elf_symbol.png "elf symbol")
+-**其中 value 表示偏移量.**
+-  在linux中，readelf -s binary 可以查看symbol表. Ndx字段表示所属section.
+-#### three pseudo sections
+-- ABS 用于不能重定位的symbol
+-- UNDEF 用于未定义的符号(在其他地方定义的)
+-- COMMON 用于未初始化且为未分配的数据对象。
+-### 5. symbol resolution
+-  将 relocatable object file 中的symbol table的symbol definition 与 symbol 关联.
+-  对全局symbole的解析，先在当前module中找，未找到的话会生成一个symbol table的入口项让linker来处理。如果linker在其他module未找到定义，会打印错误。
+-  mangling of 链接器符号 in c++ 和 Java，为同名函数生成唯一的名字。例如，Foo::bar(int, long) -> bar__3Fooil,参考 csapp 第644页。
++### 3. object files  
++- relocatable object file(compiler and assembler产生). 用来创建executable object file.  
++- executable object file(linker). 可以执行  
++- shaired object file. 可以被装载和动态链接的目标文件。  
++#### relocatable object file  
++ELF, executable and linkable file.  
++ELF header, 头16字节是字长和字节序列.其他部分包含ELF大小、目标文件类型、机器类型、section header表的偏移以及它中入口的大小和数量。  
++##### sections  
++- .symtab, 一个包含函数和全局变量的符号表, 不含有局部变量的入口.  
++- .rel.text, .text中的位置列表, 引用外部函数或外部全局变量的指令需要修改。通常在executable object file 删掉了.rel.text  
++- .rel.data, 全局变量的重定位信息.  
++- .debug, -g 参数产生这个调试符号表.  
++- .line, c源程序中的行号与.text中的指令的映射。-g 参数才有这个section.  
++- .strtab, 符号表的字符串表。  
++### 4. symbol and symbol tables  
++static 限定的局部变量不是由栈管理的。  
++有一个Elf_Symbol结构体.  
++![](image/elf_symbol.png "elf symbol")  
++**其中 value 表示偏移量.**  
++在linux中，readelf -s binary 可以查看symbol表. Ndx字段表示所属section.  
++#### three pseudo sections  
++- ABS 用于不能重定位的symbol  
++- UNDEF 用于未定义的符号(在其他地方定义的)  
++- COMMON 用于未初始化且为未分配的数据对象。  
++### 5. symbol resolution  
++将 relocatable object file 中的symbol table的symbol definition 与 symbol 关联.  
++对全局symbole的解析，先在当前module中找，未找到的话会生成一个symbol table的入口项让linker来处理。如果linker在其他module未找到定义，会打印错误。  
++mangling of 链接器符号 in c++ 和 Java，为同名函数生成唯一的名字。例如，Foo::bar(int, long) -> bar__3Fooil,参考 csapp 第644页。  
+diff --git a/pwn/gcc.md b/pwn/gcc.md
+index b4db704..80cfc31 100644
+--- a/pwn/gcc.md
++++ b/pwn/gcc.md
+@@ -1,9 +1,9 @@
+ # gcc  
+-## param
++## param  
+ * -c 编译和汇编  
+ * -0n n级代码优化  
+ * -o 编译，汇编，链接  
+ * -masm att(default) or intel  汇编代码格式  
+-## inline assembly feature of gcc
+-* 使用asm指令
++## inline assembly feature of gcc  
++* 使用asm指令  
+ 
+diff --git a/pwn/gdb.md b/pwn/gdb.md
+index bf3fdeb..ae853c0 100644
+--- a/pwn/gdb.md
++++ b/pwn/gdb.md
+@@ -8,8 +8,8 @@
+ - distance addr1 addr2  = addr2 - addr1  
+ - search -s "target string"  
+ - vmmap 查看进程中的权限及地址范围  
+-- bt backtrace 函数调用路径,可查看当前运行到哪一行
+-- break line-or-function if expr 条件断点
++- bt backtrace 函数调用路径,可查看当前运行到哪一行  
++- break line-or-function if expr 条件断点  
+ - set var $reg/addr=value  修改变量值  
+ - list <linenum>/<function>/<first>,<last>/,<last>/-/+/empty  显示源代码(-g)  
+-- until 执行完一次循环
++- until 执行完一次循环  
+diff --git a/pwn/stackoverflow.md b/pwn/stackoverflow.md
+index bc26e3e..4a6d0c1 100644
+--- a/pwn/stackoverflow.md
++++ b/pwn/stackoverflow.md
+@@ -5,7 +5,7 @@
+ 函数内局部变量利用，可覆盖这函数返回地址(返回地址后4/8个字节要清零) 或者  可以修改该函数内局部变量值。  
+ 注意：read 读取需要注意读取长度，需覆盖目标字段。fgets gets  
+ 32bit: ebp + 8h 第一个参数； ebp + 0ch 第二个参数 以此类推 ebp的位置是固定的  
+-64bit: 参数和局部变量先存寄存器(左边的参数)再存stack space(右边的存栈中)
++64bit: 参数和局部变量先存寄存器(左边的参数)再存stack space(右边的存栈中)  
+ 可以使用plt的函数地址。  
+ 函数栈结构有时候不满足一般条件，需要通过gdb调试知道返回地址位置，main函数的返回地址看retn指令。  
+ 通过距离算偏移用ebp  
+@@ -48,5 +48,5 @@ canary 设计为以0x00结尾，为了保证截断字符串。
+ 2. hyjack __stack_chk_failed,让它不完成该功能。hyjack got表，让它执行其他的函数，然而__stack_chk_fail不行，需要overwrite 尚未执行的stack_chk_failed的got表项。  
+ 3. 通过一些其他机制跳过canary的检查。如c++异常机制绕过canary检查。  
+ 
+-## other
+-- red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。
++## other  
++- red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。  
+diff --git a/reverse/c.md b/reverse/c.md
+index d66d55d..47d9396 100644
+--- a/reverse/c.md
++++ b/reverse/c.md
+@@ -2,6 +2,6 @@
+ ## common api  
+ sprintf(const char*, format string, ...)  
+ 
+-## union
+-union中所有字段共用一块内存区域，内存区域长度是union中字段的最长长度。
++## union  
++union中所有字段共用一块内存区域，内存区域长度是union中字段的最长长度。  
+ 
+diff --git a/web/phpstudy.md b/web/phpstudy.md
+index e080d73..55b5802 100644
+--- a/web/phpstudy.md
++++ b/web/phpstudy.md
+@@ -10,5 +10,5 @@
+ 如果使用ftp，请开放21以及30000-30050端口  
+ 如果在虚拟机安装，请将ip换成虚拟机内网ip  
+ 
+-### xp
+-控制面板管理工具
++### xp  
++控制面板管理工具  
+diff --git a/web/web.md b/web/web.md
+index b81e381..f22f9c9 100644
+--- a/web/web.md
++++ b/web/web.md
+@@ -1,6 +1,6 @@
+-#web
+-## proxy
+-![](image/proxy.png "proxy")
+-- 正向代理中, proxy 和 client 在一个互联的网络中，对server透明。
+-- 反向代理中，proxy 和 server 在一个互联的网络中，对client透明, 也就是一个服务端的负载均衡器。
+-注: proxy在两种代理中做的事都是代为收发请求和响应,，不过从结构上来看正好左右互换了下，所以把后出现的那种代理方式叫成了反向代理。
++# web  
++## proxy  
++![](image/proxy.png "proxy")  
++- 正向代理中, proxy 和 client 在一个互联的网络中，对server透明。  
++- 反向代理中，proxy 和 server 在一个互联的网络中，对client透明, 也就是一个服务端的负载均衡器。  
++注: proxy在两种代理中做的事都是代为收发请求和响应,，不过从结构上来看正好左右互换了下，所以把后出现的那种代理方式叫成了反向代理。  
+-- 
+1.8.3.1
+
