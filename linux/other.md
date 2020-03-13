@@ -38,3 +38,16 @@ iconv -f gb2312 -t utf-8 1.txt> 2.txt
 3. partprobe 更新分区表  
 4. mkfs.ext3 /dev/sda* 创建ext3 fs  
 5. 根据blkid输出值，修改/etc/fstab，添加/dev/sda* mount_point ext4 defaults 0 0
+
+## extend swap volume
+1. vmware setting中扩展磁盘容量  
+2. fdisk /dev/sda 物理格式化  
+3. partprobe 更新分区表  
+4. mkswap /dev/sda*
+5. swapon /dev/swap
+6. 修改/etc/fstab，添加/dev/sda* swap swap defaults 0 0
+还有一种临时申请空间的方法，如下。
+1. dd if=/dev/zero of=/tmp/mem.swap bs=1M count=4096   (4G)
+2. mkswap /tmp/mem.swap
+3. swapon /tmp/mem.swap
+
