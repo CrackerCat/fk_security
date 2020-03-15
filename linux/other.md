@@ -45,7 +45,7 @@ iconv -f gb2312 -t utf-8 1.txt> 2.txt
 3. partprobe 更新分区表  
 4. mkswap /dev/sda*
 5. swapon /dev/swap
-6. 修改/etc/fstab，添加/dev/sda* swap swap defaults 0 0
+6. 修改/etc/fstab，添加/dev/sda* swap swap defaults 0 0  
 还有一种临时申请空间的方法，如下。
 1. dd if=/dev/zero of=/tmp/mem.swap bs=1M count=4096   (4G)
 2. mkswap /tmp/mem.swap
