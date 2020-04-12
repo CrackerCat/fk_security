@@ -10,6 +10,9 @@ netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netf
 - iptable -D INPUT -s ip -j DROP  //delete rule
 - iptables -L -n 打印规则
 
+## libpcap
+  unix/linux下网络数据包捕获函数库，是大多数网络监控软件的基础。
+
 ## route
 配置kernel ip table。
 

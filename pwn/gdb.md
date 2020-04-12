@@ -1,4 +1,5 @@
-# gdb commad:  
+# gdb 
+## common commad:  
 - finish ： 执行完整个函数  
 - c : 继续运行  
 - x/64 w(四字节)/g(八字节)/c(字符格式)/b(字节) x(16进制)/i(显示指令)/s(字符串) $寄存器/地址  查看地址值  
@@ -12,9 +13,25 @@
 - break line-or-function if expr 条件断点
 - set var $reg/addr=value  修改变量值  
 - list <linenum>/<function>/<first>,<last>/,<last>/-/+/empty  显示源代码(-g)  
-- until 执行完一次循环
+- until 执行完循环
 - call func(para list)  调用函数
 - display expression  在每一次单步调试都会打印expression的值
 - watch expression 一旦表达式的值改变就会中止程序
 - info locals
-- 
+- ret 直接返回，不执行完剩余指令
+- fin 完成当前函数的执行
+- got/plt 打印got/plt
+- cyclic number 生成一条有规律的字符串，cyclic -l string 查找字符串的偏移 eg aaaabaaacaaa。。。
+- arena
+- paseheap
+- heapinfo
+- unlink
+- orange
+- bins
+- magic
+- tcache
+- set args arg1(可以使用$(python -c "print()")传入不可显示字符) arg2 ... 设置程序参数
+- show args 显示程序参数
+## gdb argument
+- gdb --args program arg1 arg2 ... 带参调试
+- command/x 使用命令文件自动化调试

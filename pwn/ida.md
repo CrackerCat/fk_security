@@ -1,9 +1,9 @@
 # IDA的使用  
 ## 基本命令  
 - f5反汇编  
-- n修改函数名  
+- n修改函数名,变量名  
 - y修改类型  
-- x跟踪变量引用  
+- x跟踪变量引用,查看哪些地方用到了它  
 - shift + f5 导入外部库。  
 - shift + f12 打开string window。  
 - ctrl+alt+k 修改汇编，打patch,再点击edit应用patch到input file.  

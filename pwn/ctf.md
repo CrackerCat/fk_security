@@ -96,10 +96,11 @@ PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt"
 static link 可以使用ROPgadget 生成 ROP chain  
     
 ## gdb调试  
-context.terminal = ['tmux','splitw','-h'] //当无图形时  
+context.terminal = ['tmux','sp','-h'] //当无图形时  
 gdb.attach(p, 'gdb cmd') :  
 context.log_level = 'debug'  
 log.success()  
+log.info()
     
 ## 栈溢出的简化计算：  
 cyclic(0x100):生成0x100大小的pattern  
@@ -128,3 +129,39 @@ strcpy, 会将'x00'也拷贝过去。
 strlen, 遍历到'x00'终止  
 vmmap 可用来看哪些空间可读写，执行。  
 objdump -d binary 反汇编二进制  
+
+
+## model
+```python
+from pwn import * 
+import sys
+
+context.terminal=['tmux', 'sp', '-h']
+context.log_level='debug'
+
+DEBUG=1
+
+LOCAL=True
+BIN=
+HOST=
+PORT=
+
+def exploit(p):
+  p.interactive()
+  return
+
+if __name__ == '__main__':
+  elf = ELF(BIN)
+  if len(sys.arg) > 1:
+    LOCAL=False
+    p = remote(HOST,PORT)
+    exploit(p)
+  else:
+    LOCAL=True
+    p = process(BIN)
+    log.info('PID:' + str(proc.pidof(p)[0]))
+    #pause()
+    if DEBUG:
+      gdb.attach(p)
+    exploit(P)
+```
