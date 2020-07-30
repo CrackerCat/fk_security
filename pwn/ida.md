@@ -2,11 +2,13 @@
 ## 基本命令  
 - f5反汇编  
 - n修改函数名,变量名  
-- y修改类型  
+- y修改类型,调用方式
 - x跟踪变量引用,查看哪些地方用到了它  
 - shift + f5 导入外部库。  
 - shift + f12 打开string window。  
 - ctrl+alt+k 修改汇编，打patch,再点击edit应用patch到input file.  
+- tab 切换反编译窗口和汇编窗口
+- shift + E 导出数据
 
 ## flirt  
 IDA用于识别库代码序列的一项技术，解决静态链接的问题。模式匹配算法  

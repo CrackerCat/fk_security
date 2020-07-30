@@ -2,6 +2,9 @@
 ## nmap  
 nmap -sn ip/netmask_bits  扫描网段主机状态  
 
+## od
+  以各种数据格式显示文本。
+
 ## netfilter  
 netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netfilter系统缺省的表是filter，该表包含INPUT,FORWARD和OUTPUT.  INPUT表示数据包已经进入主机用户空间。
 

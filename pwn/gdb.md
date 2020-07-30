@@ -32,6 +32,12 @@
 - tcache
 - set args arg1(可以使用$(python -c "print()")传入不可显示字符) arg2 ... 设置程序参数
 - show args 显示程序参数
+- unset env field1=value1; show env  gdb中环境变量相关命令
+- set env field1=value1
+- handle SIGSEGV nostop : 关闭gdb对SIGSEGV信号的处理
+
 ## gdb argument
 - gdb --args program arg1 arg2 ... 带参调试
 - command/x 使用命令文件自动化调试
+## pwndbg
+- $rebase(offset)

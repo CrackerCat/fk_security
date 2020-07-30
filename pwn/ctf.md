@@ -1,19 +1,27 @@
 ## py  
-p.interactive() 接下来自动交互。  
+- p.interactive() 接下来自动交互。  
+- context.arch = ''; flat([]); // no p32 p64 + for payload.  
+- send() 
+- sendline() 发送msg,并进行换行(末尾\n,多一个字节)
+- sendlineafter() =  recvuntil() + sendline()  
+- recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
+
 ## 基础知识  
-x86 按字节编制，字节序：低字节放低地址  
-    
-context.arch = ''; flat([]); // no p32 p64 + for payload.  
-sendlineafter() =  recvuntil() + sendline()  
+- x86 按字节编制，字节序：低字节放低地址  
     
 随机数（伪随机数)利用： seed不变,随机数序列不变。  
     
 dll = ctypes.cdll.LoadLibrary() 引用动态库。  
     
-* NX(no-execute)保护：栈内代码不可执行,是在硬件上实现的。  
+## checksec
+* NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
 * canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
-* PIE:地址随机化  
+* PIE:地址随机化, data,code段都会变。 
 * RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
+ * disabled got和plt都可写，fini_array也可写
+ * partial(默认) got表可写，考虑劫持got表
+ * fulled    load time的时候全部函数地址已经解析完成，不可写
+* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space
     
 整型溢出： __int8等赋值修改变量。  
     
@@ -29,7 +37,7 @@ readelf -S 查看section header的information.
 elf模块： 静态加载ELF文件  
 所谓的动态链接在linux中是延迟绑定技术，涉及了got表和plt表。  
 plt表(程序链接表)：跳板，跳转到一个地址来加载libc库。文件中会对每个用到的外部函数分配一个plt函数(函数入口地址),可从ida中读出。不能修改。第一次调用外部函数，会进行解析函数。  
-got表(全局偏移量的表，数据段.data中)：经过plt表的跳转会跳转会在got表上写入地址，这个地址是函数调用或变量的**内存真实地址**.可以修改。  
+got表(全局偏移量的表，数据段.data中)：经过plt表的跳转会跳转会在got表上写入地址，这个地址是函数调用或变量的**内存真实地址**,所以表项大小跟地址一样大，覆盖它的时候不能大于表项的大小.  
 注意：plt表只在程序调用函数之前有用，调用函数之后第二次执行这个函数就不会经过plt表。  
 加载：动态链接文件加载时有时候会重新改变基地址但是偏移(8位地址的后4位是一样的)是不变的(寻址方式是基地址+偏移量)  
 address 获取ELF的基址  
@@ -152,7 +160,7 @@ def exploit(p):
 
 if __name__ == '__main__':
   elf = ELF(BIN)
-  if len(sys.arg) > 1:
+  if len(sys.argv) > 1:
     LOCAL=False
     p = remote(HOST,PORT)
     exploit(p)

@@ -1,23 +1,37 @@
 # assembly language
-主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.
+  主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.
+  x86汇编一直存在两种不同的语法，在intel的官方文档中使用intel语法，Windows也使用intel语法，而UNIX平台的汇编器一直使用AT&T语法。
+
+## difference between AT&T and intel
+- 操作数前缀。 在 Intel 的汇编语言语法中，寄存器和和立即数都没有前缀。但是在 AT&T 中，寄存器前冠以％，而立即数前冠以$。在 Intel 的语法中，十六进制和二进制立即数后缀分别冠以h和b，而在 AT&T 中，十六进制立即数前冠以0x。
+- 源/目的操作数顺序。 Intel 汇编语言的指令与 AT&T的指令操作数的方向上正好相反：在 Intel 语法中，第一个操作数是目的操作数，第二个操作数源操作数。而在 AT&T 中，第一个数是源操作数，第二个数是目的操作数。
+- 寻址方式。 Intel 的指令格式是segreg段寄存器： [base+index*scale+disp]，而 AT&T 的格式是%segreg：disp(base,index,scale)。
+- 标识长度的操作码前缀和后缀。 在 AT&T 的操作码后面有时还会有一个后缀，其含义就是指出操作码的大小。l表示长整数（32 位），w表示字（16 位），b表示字节（8 位）。而在 Intel 的语法中，则要在内存单元操作数的前面加上 byte ptr、 word ptr,和 dword ptr，dword对应long。
 
 ---
 ## assemble instruction  
 * nop : 空操作指令 延时一个机器周期。  
 * push ax;  送入栈中，sp - 1  
 * pop ax; $sp -> ax,sp + 1  
-* movl src dst   四字节  
+* movl dst src  四字节 赋值指令 src -> dst
 * movl $-8192, %eax  将栈底四字节 移到 eax   $ = 0xffffffff  
 * movl %eax, 4(%edx) 将%edx + 4地址中的内容 移入 %eax
 * lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]  
-* mov dword ptr [12345678],eax  把内存地址12345678中的双字型（32位）数据赋给eax  
 * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
 * jg 前大于后
 * jge 前大于等于后
 * cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
+* test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。
 * add src des <=> des = des + src
+* sub des src <=> des = des - src
 * rep ret 解决ret的分支预测问题。 [rep详解](http://repzret.org/p/repzret/ "rep")
 * cltq %eax->%rax的符号拓展转换 <=> movslq(s符号 l双字  q四字) %eax,%rax
+* int(32bit)/syscall(64bit) 系统中断 配合寄存器调用函数
+* movl -8(%eax, %edx, 4), %ecx EDX乘以4再减去8，加到EAX，從該地址的內存中讀取4字節的值，並放入ECX中
+* sar 算术右移，补符号位. SHR 逻辑右移，补0
+* cdqe (convert doubleword to quadword extension) : 规定将EAX中的符号扩展到RAX中，执行这个指令就将EAX中的符号扩展到RAX中了。 
+
+
 ### 几个术语
 * 字节：8位，后缀：b
 * 字：16位，后缀：w
@@ -84,6 +98,7 @@ arithmetic right shift: fill 最高位.
 对于无符号数，右移填充0.对于有符号数，右移可能是logical shift也或者是 arithmetic shift，大多数情况是算术右移，Java中明确规定了，c语言未明确规定右移采取哪种方式。  
 
 ### function return value  
+* call fuction后相应寄存器会发生变化。
 * 32bit: 存放在eax中  
 * 64bit: 高位存放在edx,低位存放在eax/存放在rax中  
 

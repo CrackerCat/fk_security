@@ -279,13 +279,6 @@ malloc(0x10); //分配第二个 0x10 的chunk2
 free(ptr);  
 ptr1=malloc(0xa0);  
 - 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
-- 对free的small bin 进行extend  
 
 int main()  
 {  

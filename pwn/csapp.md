@@ -10,6 +10,11 @@
 - Symbol resolution. 将符号与符号定义关联。
 - relocation. 将符号定义与内存位置关联。
 
+### linker example
+  动态链接器本身也是一个共享目标 ，在Linux系统中为ld-linux.so，因而 可以由加载器根据.interp节中指定的路径来加载并启动动态链接器运行。动态链接器完成相应的重定位工作后再把控制权交给可执行程序,启动其第一条指令执行。
+#### dynamic link的全过程
+  整个过程被分 成两步：首先，进行静态链接以生成部分链接的可执行目标文件myproc，该文件中仅包含共享库（包括指 定的共享目标文件mylib.so和默认的标准共享库文件libc.so） 中的符号表和重定位表信息，而共享库中的代码和数据并没有被合并到myproc 中；然后，在加载myproc时，由加载器将控制权转移到指定的动态链接器，由动态链接器对共享目标文件libc .so、mylib.so和myproc中的相应模块内的代码和数据进行重定位并加载共享库，以生成最终的存储空间中完全链接的可执行目标，在完成重定位和加载共享库后，动态链接器把控制权转移到程序myproc。在执行myproc 的过程中，共享库中的代码和数据在存储空间的位置一直是固定的。
+
 ### 3. object files
 - relocatable object file(compiler and assembler产生). 用来创建executable object file.
 - executable object file(linker). 可以执行
