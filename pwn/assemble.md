@@ -18,7 +18,7 @@
 * movl %eax, 4(%edx) 将%edx + 4地址中的内容 移入 %eax
 * lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]  
 * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
-* jg 前大于后
+* jg=ja 前大于后
 * jge 前大于等于后
 * cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
 * test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。
