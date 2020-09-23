@@ -22,6 +22,10 @@ netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netf
 - route add/del -net destination gw output_ip 添加路由项 
 - route -n 打印路由表
 
+## ifconfig
+  网络配置
+- ifconfig dev-name ip/掩码位数 up/down
+
 # ssh -X  
 ## windows connect to linux  
 

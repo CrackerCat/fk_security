@@ -8,7 +8,7 @@
 64bit普通函数传参: 参数和局部变量先存寄存器(rdi,rsi,rdx,rcx,r8,r9)(前六个参数)再存stack space(右边的存栈中)
 32bit syscall传参: eax对应于系统调用号，ebx，ecx,edx,esi,edi,ebp分别对应于前六个参数，多余的参数压在栈上。
 64bit syscall传参: rax对应于系统调用号，传参规则与普通函数传参一致。
-###
+### syscall
 - execve()的调用号是0x3b
 - __libc_csu_init()有pop指令和ret指令,可以利用,用来构造ROP链。
 
@@ -17,6 +17,10 @@
 system() 是一个单参数的函数，汇编过程： push 参数地址(说明调用system之前，参数在栈顶);    call _system;  原因如下：  
 函数地址调用函数，参数入栈，[返回地址入栈，ip ->函数地址](call function),相当于ic语言调函数入栈的情况,参数入栈,call function入栈.  
 call function指令调用函数，将函数的返回地址入栈，ip指向函数开始处(函数地址). 开始进入函数体中，ebp入栈， esp = ebp, esp -**h (在call function之前参数已经入栈).  
+### nop slide/nop sled/nop ramp
+  通过命中一串连续的 NOP (no-operation) 指令/无用函数调用，从而使CPU指令执行流一直滑动到特定位置(one_gadget)。
+- 使用前提：未开启栈破坏检测（canary）和限制可执行代码区域。
+- 一般将注入的代码放到存在溢出的缓冲区中，再将其所在栈帧返回地址用其起始地址覆盖，如此栈帧在返回时%rip就会转向缓冲区的位置，再执行注入的指令。*特殊的情况*，可以在溢出的缓冲区中找可用的地址(参考2020_DASCTF的magic_number)。
 
 ## 构建bin/sh  
 栈溢出：ret -> gets_addr --.bss--> binsh_addr --ret-> system_addr  

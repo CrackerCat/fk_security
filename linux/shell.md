@@ -28,6 +28,9 @@
 ### set
   shell中所有变量
 - set -/+x: 开启/关闭详细的日志输出(xtrace).
+
+### printf
+  打印格式化字符串。
 ---
 ## bash
 ### envirenment variable

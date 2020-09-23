@@ -1,12 +1,22 @@
 # c language  
 ---
 ## common api  
-sprintf(const char*, format string, ...)  
+  sprintf(const char*, format string, ...)  
 ---
 
 ## union
-union中所有字段共用一块内存区域，内存区域长度是union中字段的最长长度。
+  union中所有字段共用一块内存区域，内存区域长度是union中字段的最长长度。
 ---
+
+## wchar_t
+  一个宽字符占用多个字节。
+- wprintf()
+- fgetws()
+- wcslen()
+---
+
+## main(int argc, const char **argv, const char **envp)
+  envp : 环境变量
 
 ## linux c
 ### pipe()
@@ -38,6 +48,10 @@ union中所有字段共用一块内存区域，内存区域长度是union中字�
 ### execlp()
   执行某个带参程序。
 
+### mprotect()
+  修改一段指定内存区域的保护属性。
+  
+
 ### signal
 #### signal()
   将信号与信号处理函数进行绑定。
@@ -49,3 +63,4 @@ union中所有字段共用一块内存区域，内存区域长度是union中字�
   发送 SIGTSTP 信号（停止进程的运行, 但该信号可以被处理和忽略）.给前台进程组中的所有进程，常用于挂起一个进程。如果需要恢复到前台输入fg，恢复到后台输入bg.
 #### ctrl+d
   表示一个特殊的二进制值，表示 EOF。 
+

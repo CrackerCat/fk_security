@@ -4,7 +4,12 @@
 - send() 
 - sendline() 发送msg,并进行换行(末尾\n,多一个字节)
 - sendlineafter() =  recvuntil() + sendline()  
+- sendafter()
 - recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
+- recv(byte_num)
+- recvuntil(str)
+## python3
+  bytes2str: bytes.decode(bytes, encoding='iso8859-1')
 
 ## 基础知识  
 - x86 按字节编制，字节序：低字节放低地址  
@@ -17,6 +22,7 @@ dll = ctypes.cdll.LoadLibrary() 引用动态库。
 * NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
 * canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
 * PIE:地址随机化, data,code段都会变。 
+  * vsyscall段的地址不会变，可以将这个段dump出来，用ida分析，查看有哪些vsyscall。使用vsyscall必须从函数开头执行，这是因为vsyscall执行时会进行检查，如果不是函数开头执行的话就会出错。
 * RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
  * disabled got和plt都可写，fini_array也可写
  * partial(默认) got表可写，考虑劫持got表
@@ -31,7 +37,7 @@ system的参数，可以通过gets，read, strcpy, strcat, sprintf读取任意�
     
 strings -t x 可以查看在文件中字符串的0x偏移量  
 libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()  
-readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .sysmtab(编译时所需符号信息)  
+readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .symtab(编译时所需符号信息)  
 readelf -S 查看section header的information.  
     
 elf模块： 静态加载ELF文件  
@@ -43,7 +49,7 @@ got表(全局偏移量的表，数据段.data中)：经过plt表的跳转会跳�
 address 获取ELF的基址  
 symbols 获取函数的地址(跟是否开启PIE有关) ,未开启就是偏移量  
     
-网络流传过来的需要u32解开?  
+网络流传过来的需要u32解开,生成int类型地数据。  
     
 可执行文件往往是第一个被加载的文件，它可以选择一个固定空间的地址，比如Linux下一般都是0x0804000,windows下一般都是0x0040000  
 共享的指令可以使用地址无关代码技术(PIC)，装载地址不变，跟地址相关部分放到数据段里面。  
@@ -125,6 +131,22 @@ linux: int 0x80 用于系统调用。
 当存在栈溢出ROP时，可以将返回地址指向int 0x80指令的地址，再修改相应寄存器的地址(通过ROPgadget获得)  
 ![](image/ROP_syscall.png "ROP syscall")  
 ![](image/syscall.png "disassemble syscall")  
+---
+
+## LibcSearcher
+  这是针对CTF比赛所做的小工具，在泄露了Libc中的某一个函数地址后，常常为不知道对方所使用的操作系统及libc的版本而苦恼，常规方法就是挨个把常见的Libc.so从系统里拿出来，与泄露的地址对比一下最后12位。
+  这个工具可以让我们获取到程序正在使用的libc文件中每个函数或字符串的偏移。
+  当libc文件不准确时，可以用这个工具。
+```py
+from LibcSearcher import *
+
+#第二个参数，为已泄露的实际地址,或最后12位(比如：d90)，int类型
+obj = LibcSearcher("fgets", 0X7ff39014bd90)
+
+obj.dump("system")        #system 偏移
+obj.dump("str_bin_sh")    #/bin/sh 偏移
+obj.dump("__libc_start_main_ret")    
+```
     
 ## shellcode: 填入某个位置充当指令。  
 https://www.exploit-db.com/shellcodes  

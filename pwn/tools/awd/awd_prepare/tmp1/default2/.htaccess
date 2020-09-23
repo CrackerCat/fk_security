@@ -1,4 +1,0 @@
-AuthName "apache2"
-AuthType basic
-AuthUserFile  /home/wwwroot/default2/members.txt
-require valid-user

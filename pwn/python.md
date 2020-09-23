@@ -1,17 +1,20 @@
 ## number transform  
 * int(str, base) str -> int(Dec)  decimal  
 * chr(num) num to character.  
+* ord(ch) 将一个字符转换为它的整数值  
+* hex(num) 将一个整数转换为一个十六进制字符串
 
 ## str  
 str[begin:end]   str[(-begin):(-end)]  output str   元素不可修改.  
 
 ## list  
-list: ls = [1,2,4] ls[:] output list  ls[index]; output 元素。  
-修改列表中元素：ls[begin:end] = 'ele'  
-str2list: list(str) return list  
-list2str:''.join(list) return str  
-list 添加元素 ：append 方法  
-[(),()] 循环遍历，可以 for one, two.... in 容器:  
+- list: ls = [1,2,4] ls[:] output list  ls[index]; output 元素。  
+- 修改列表中元素：ls[begin:end] = 'ele'  
+- str2list: list(str) return list  
+- list2str:''.join(list) return str  
+- list 添加元素 ：append 方法  
+- [(),()] 循环遍历，可以 for one, two.... in 容器:  
+- index(ele) : 查找元素
 
 ## tuple  
 tuple: 元素不可修改  (,,,,,)  
@@ -142,3 +145,4 @@ repr() 将对象转化为供解释器读取的形式，比如存在不可打印�
 右侧对齐(左侧填充)： str.rjust(width, char)    str.zfill(width)  
 左侧对齐(右侧填充)： str.ljust(width, char)  
 str(int_data): 将整数转成字符串。
+按位取反： num^0xff...

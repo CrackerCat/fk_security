@@ -1,4 +1,4 @@
-# assembly language
+# x86 assembly language
   主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.
   x86汇编一直存在两种不同的语法，在intel的官方文档中使用intel语法，Windows也使用intel语法，而UNIX平台的汇编器一直使用AT&T语法。
 
@@ -16,10 +16,13 @@
 * movl dst src  四字节 赋值指令 src -> dst
 * movl $-8192, %eax  将栈底四字节 移到 eax   $ = 0xffffffff  
 * movl %eax, 4(%edx) 将%edx + 4地址中的内容 移入 %eax
+* movzx dst src : 用于将较小值拷贝到较大值中, 扩展至16位或者32位,只适用于无符号整数
 * lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]  
 * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
 * jg=ja 前大于后
 * jge 前大于等于后
+* jnb 前不低于后
+* jl(jmp less)=jnge : 小于则转移，用于有符号数的条件转移
 * cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
 * test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。
 * add src des <=> des = des + src
@@ -30,6 +33,9 @@
 * movl -8(%eax, %edx, 4), %ecx EDX乘以4再减去8，加到EAX，從該地址的內存中讀取4字節的值，並放入ECX中
 * sar 算术右移，补符号位. SHR 逻辑右移，补0
 * cdqe (convert doubleword to quadword extension) : 规定将EAX中的符号扩展到RAX中，执行这个指令就将EAX中的符号扩展到RAX中了。 
+* shl des offset : 逻辑左移, 最低位用0补充,将最后移出的一位写入CF中,如果移动位数大于1时，必须将移动位数放在cl中。
+* shr : 同理,逻辑右移
+* sar : 算数右移, 保留操作数的符号，即用符号位来补足，而SHR右移时总是用0来补足.
 
 
 ### 几个术语
@@ -117,3 +123,29 @@ struct S1 e;
 struct S2 d[4];
 ```
   在上述代码中，e占9字节，而d数组中元素占12字节，需要考虑每个元素的对齐。
+---
+
+### instruction machine code
+#### x64
+- syscall : 0x0F05
+- nop : 0x90
+
+# mips assembly language
+## base
+### register
+- a0-a3 : 存储参数
+- fp: fram pointer，用来恢复栈之类的操作，可以理解为和ebp差不多的作用
+- sp: 存储栈地址
+- v0...: 存储一些变量或地址
+- t8,t9: 临时寄存器
+- t9常常用来调用函数
+
+### assemble instruction  
+- j target: unconditional jump to program label target　
+- jr $t9: 先执行跳转指令的后一条指令，然后再跳转寄存器中的地址。
+- jar sub_label : 保存pc到$ra中，再跳到sub_label, 用于子程序调用。如果子程序调用其他子程序，就把$rau压栈保存，再保存pc进行跳转。
+- addiu RD, RS, CONST16 : RD = RS + const16(+- 符号操作或符号扩展)
+- move $RD, $RS : $RD=$RS
+- li $RD, $num : $RD=$num
+
+
