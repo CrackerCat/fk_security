@@ -1,16 +1,20 @@
 # 堆  
-  堆是程序虚拟地址空间的一块连续的线性区域，由低地址向高地址方向增长。管理堆的那部分程序为堆管理器，处于用户程序和内核中间.  
-  linux中glic堆进行实现，堆分配器是ptmalloc,在glibc-2.3.x之后，glibc中集成了ptmalloc2。ptmalloc2主要是通过malloc/free函数来分配和释放内存块。Linux有这样的一个基本内存管理思想，只有当真正访问一个地址的时候，系统才会建立虚拟页面与物理页面的映射关系。  
-  堆是从内存地址向内存高址增长的。栈是从内存高地址向低地址增长。栈位于进程较高的位置，堆位于进程较低的位置。  
+	堆是程序虚拟地址空间的一块连续的线性区域，由低地址向高地址方向增长。管理堆的那部分程序为堆管理器，处于用户程序和内核中间.  
+	linux中glic堆进行实现，堆分配器是ptmalloc,在glibc-2.3.x之后，glibc中集成了ptmalloc2。ptmalloc2主要是通过malloc/free函数来分配和释放内存块。Linux有这样的一个基本内存管理思想，只有当真正访问一个地址的时候，系统才会建立虚拟页面与物理页面的映射关系。  
+	堆是从内存地址向内存高址增长的。栈是从内存高地址向低地址增长。栈位于进程较高的位置，堆位于进程较低的位置。  
     
 ## malloc(size_t n)  
   现在的实现支持多线程。  
   n=0, 返回当前系统允许的堆的最小内存块。  
   n为负数，一般申请失败。  
   申请后内存空间free后，并不会归还给系统，可以看/proc/program id/maps  
+
+---
   
 ## calloc  
   与 malloc 的区别是 calloc 在分配后会自动进行清空，这对于某些信息泄露漏洞的利用来说是致命的。  
+
+---
   
 ## realloc  
   realloc 函数可以身兼 malloc 和 free 两个函数的功能。  
@@ -24,7 +28,7 @@
 * 当 realloc(ptr,size) 的 size 等于 0 时，相当于 free(ptr)  
 * 当 realloc(ptr,size) 的 size 等于 ptr 的 size，不进行任何操作  
   
-    
+---
 ## free(void* p)  
 释放由p所指向的内存块(malloc or realloc 分配的)  
 当p为空指针，不执行任何操作。  
@@ -78,7 +82,8 @@ P->bk->fd=*(ptr - size(ptr)*2 + size(ptr)*2) = *ptr = P
    unlink后,P->fd->bk = P->BK <=> *ptr = ptr - size(ptr)*2; P->bk->fd = P->fd <=> *ptr = ptr - size(ptr)*3. 
    *ptr->'a'*size(ptr)*3 + free@got表项地址, 即 **ptr = 'a'*size(ptr)*3 + free@got表项地址 => *ptr = free@got表项地址 => *ptr 指向 free@got
    最后，使用ptr就可以修改got表。
-    
+
+--- 
 ## 内存分配背后的系统调用  
     
 对于堆操作，brk(调整heap的结尾,操作系统提供的接口), sbrk函数(sbrp(0)获取heap开始地址, glibc 提供的接口)，通过增加brk的大小来向操作系统申请内存，start_brk以及brk指向data/bss的结尾(跟ASLR有关)。初始时，start_brk = brk.  
@@ -90,10 +95,11 @@ munmap()去除 mmap()创建的内存空间。
 /proc/pragram id/maps: 保存当前进程的内存空间信息。  
     
 arena: 程序像操作系统申请很小的内存，但是为了方便，操作系统把很大的内存分配给程序，这样的一块连续的内存区域为arena.  
+
+---   
+## 堆相关的数据结构  
     
-# 堆相关的数据结构  
-    
-## malloc_chunk  
+### malloc_chunk  
 堆申请的内存为chunk。这块内存在 ptmalloc 内部用 malloc_chunk 结构体来表示。无论一个 chunk 的大小如何，处于分配状态还是释放状态，它们都使用一个统一的结构。  
 ```    
 truct malloc_chunk {    
@@ -209,8 +215,6 @@ MALLOC_ALIGNMENT. */
 该结构用于管理堆，记录每个 arena 当前申请的内存的具体状态。  
 无论是 thread arena 还是 main arena，它们都只有一个 malloc state 结构。由于 thread 的 arena 可能有多个，malloc state 结构会在最新申请的 arena 中。  
 注意，main arena 的 malloc_state 并不是 heap segment 的一部分，而是一个全局变量，存储在 libc.so 的数据段。  
-该结构用于管理堆，记录每个 arena 当前申请的内存的具体状态。  
-无论是 thread arena 还是 main arena，它们都只有一个 malloc state 结构。由于 thread 的 arena 可能有多个，malloc state 结构会在最新申请的 arena 中。  
 struct malloc_state {  
 /* Serialize access.  */  
 __libc_lock_define(, mutex);  
@@ -337,7 +341,7 @@ free(ptr4);//unlink进行前向extend
 
 ## 保护机制
 ### Safe Linking
-  2.32中引入的新的保护机制。也可以参考[聊聊glibc 2.32 malloc新增的保護機制-Safe Linking](https://publicki.top/2020/08/25/SoSafeMinePool/[https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773](https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773) "libc.2.32")
+  2.32中引入的新的保护机制。也可以参考[聊聊glibc 2.32 malloc新增的保護機制-Safe Linking](https://publicki.top/2020/08/25/SoSafeMinePool/[https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773](https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773 "libc.2.32")
 ```c
 /* Caller must ensure that we know tc_idx is valid and there's room
    for more chunks.  */
@@ -370,3 +374,24 @@ tcache_get (size_t tc_idx)
 }
 // 参考https://publicki.top/2020/08/25/SoSafeMinePool/#more
 ```
+
+---
+
+## UAF
+	1. 内存块释放后，被置为0但又被使用。
+	2. 内存块释放后，未被置为0，但是下一次使用前没有代码对这块内存进行修改。 e.g. double free
+	3. 内存块释放后，未被置为0，但是下一次使用前有代码对这块内存进行修改。 
+### 利用原理
+	内存块释放后被重新分配给新的对象，从而实现内存块共用。
+
+### usage
+	1. 修改堆块代码，用这块空间进行正常操作。
+
+### reference
+	1. PPT：20191114-UAF漏洞检测及利用
+
+## other
+### dangling pointer
+	一些被free但未置0的悬挂指针。
+
+---

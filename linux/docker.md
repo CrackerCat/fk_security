@@ -12,3 +12,10 @@
 - docker contatiner start/restart container_name ： start/restart container
 - docker search image_name : search image in Docker Hub
 - docker pull image_name = docker image pull user_name/image_name: pull image from Docker Hub
+- docker info : docker configuration
+- docker attach container : 将标准输入输出错误重定向到容器内。
+- docker save -o tar image1 image2 ... : 导出镜像
+- docker load -i tar : 导入镜像
+- docker export/import -o tar container_name : 导出/导入容器
+
+---
