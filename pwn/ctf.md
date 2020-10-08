@@ -8,16 +8,20 @@
 - recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
 - recv(byte_num)
 - recvuntil(str)
+
+---
 ## python3
   bytes2str: bytes.decode(bytes, encoding='iso8859-1')
 
+---
 ## 基础知识  
 - x86 按字节编制，字节序：低字节放低地址  
     
 随机数（伪随机数)利用： seed不变,随机数序列不变。  
     
 dll = ctypes.cdll.LoadLibrary() 引用动态库。  
-    
+
+---
 ## checksec
 * NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
 * canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
@@ -104,18 +108,21 @@ PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt"
     
 数组越界漏洞利用。  
     
+---
 ## static link  
 静态编译的代码在同一架构上都能运行。IDA 红色部分为外部函数  
 函数符号需要重新签名.  
 static link 可以使用ROPgadget 生成 ROP chain  
-    
+   
+--- 
 ## gdb调试  
 context.terminal = ['tmux','sp','-h'] //当无图形时  
 gdb.attach(p, 'gdb cmd') :  
 context.log_level = 'debug'  
 log.success()  
 log.info()
-    
+  
+---  
 ## 栈溢出的简化计算：  
 cyclic(0x100):生成0x100大小的pattern  
 cyclic_find(0x61616161/'aaaa')：查找该数据在pattern的位置  
@@ -124,6 +131,29 @@ cyclic_find(0x61616161/'aaaa')：查找该数据在pattern的位置
 ROPGaget --binary exe --only/--string "pop | ret(instruction)"  
 ROPgadget --binary binary --ropchain 获取static execute ROP chain.  
     
+---
+## one-gadget in glibc
+	one-gadget 是glibc里调用execve('/bin/sh', NULL, NULL)的一段非常有用的gadget, 但是需要满足约束条件。
+### 绕过constraint
+	通过调试，查看调用one-gadget时的寄存器以及堆栈信息。
+### one-gadget+malloc_hook+realloc_hook
+	一般用realloc_hook平衡栈帧，满足例如rsp+0x30地址的值为0. 通过调试，选取第几条指令。
+	realloc_hook和malloc_hook相邻，且存在于libc可写段。
+```disassembly
+push r15
+push r14
+...
+push rbx
+sub rsp, 18h
+然后获取realloc_hook的值
+若不为空，调用realloc_hook函数
+...
+```
+#### 利用方式
+	1. 修改realloc_hook为one_gadget
+	2. 修改malloc_hook为realloc+n.	
+
+---
 ## 系统调用获取shell  
 当没有system()函数时  
 linux: int 0x80 用于系统调用。  

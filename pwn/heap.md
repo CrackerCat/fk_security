@@ -60,7 +60,9 @@ __libc_free (void *mem)
       return;
     }
 ```
-从上述代码看到，free函数可以使用用户自定义的函数(钩子),所以我们可以修改__free_hook指针，mem是free释放的参数地址.(—__free_hook劫持)  
+从上述代码看到，free函数可以使用用户自定义的函数(钩子),所以我们可以修改__free_hook指针，mem是free释放的参数地址.(—__free_hook劫持)。
+同理，malloc同样有一个__malloc_hook.malloc_hook-0x23是一个“固定用法”,一般用这个地址。
+
 
 ### unlink双链表冲突检测校验
   glibc-2.19中加入以下安全机制。
@@ -156,7 +158,7 @@ chunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 **最小的chunk大小**  
 ## bin  
 ptmallocc对空闲的chunk进行管理。根据空闲的chunk的大小以及使用状态分成四类，fast bins,small bins,large bins, unsorted bins.  
-对于small bins，large bins，unsorted bin 来说，ptmalloc 将它们维护在同一个数组中。这些 bin 对应的数据结构在 malloc_state中  
+对于small bins，large bins，unsorted bin 来说，ptmalloc 将它们维护在同一个数组中。这些 bin 对应的数据结构在 malloc_state中。  
 ## bin  
 ptmallocc对空闲的chunk进行管理。根据空闲的chunk的大小以及使用状态分成四类，fast bins,small bins,large bins, unsorted bins.  
 /* Fastbins */  
@@ -284,8 +286,6 @@ ptr=malloc(0x10);//分配第一个0x10的chunk
 free(ptr);  
 ptr1=malloc(0x30);// 实现 extend，控制了第二个块的内容  
 - inuse smallbin 进行 extend  
-- inuse smallbin 进行 extend  
-- inuse smallbin 进行 extend  
 int main()  
 {  
 void *ptr,*ptr1;  
@@ -315,6 +315,7 @@ ptr1=malloc(0xa0);
 前向 extend 利用了 smallbin 的 unlink 机制，通过修改 pre_size 域可以跨越多个 chunk 进行合并实现 overlapping。  
 - 通过extend 前向overlapping  
 通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
+·
 int main(void)  
 {  
 void *ptr1,*ptr2,*ptr3,*ptr4;  
@@ -384,14 +385,85 @@ tcache_get (size_t tc_idx)
 ### 利用原理
 	内存块释放后被重新分配给新的对象，从而实现内存块共用。
 
-### usage
+### exploitation
 	1. 修改堆块代码，用这块空间进行正常操作。
 
 ### reference
 	1. PPT：20191114-UAF漏洞检测及利用
 
+
+## fastbin attack
+	指所有基于 fastbin 机制的漏洞利用方法.
+### fastbin_double_free
+####前提
+	存在堆溢出、use-after-free等能控制chunk内容的漏洞。
+#### 原理
+	当一个内存被释放之后再次被释放，就是Free()了同一块内存多次，其精髓在于多次分配可以从 fastbin 链表中取出同一个堆块，相当于多个指针指向同一个堆块，结合堆块的数据内容可以实现类似于类型混淆 (type confused) 的效果。
+	Fastbin Double Free 能够成功利用主要有两部分的原因：
+	1. fastbin 的堆块被释放后 next_chunk 的 pre_inuse 位不会被清空
+	2. fastbin 在执行 free 的时候仅验证了 main_arena 直接指向的块，即链表指针头部的块。对于链表后面的块，并没有进行验证。通俗的讲就是当我们申请的一块chunk被释放后，它将以单链的形式被串在fastbin中，然后会有一个fast指针指向最后一个链上来了的chunk，当下一个chunk被释放后，将被链在上一个chunk的前面，fast指针向前移动
+#### exploitation
+	1. add(0);add(1) : 创建两个chunk
+	2. del(0);del(1);del(0) : double free ->>   fastbin头 -> 0<->1
+	3. add(2,"修改chunk0的fd"); : fastbin头->1->0->"修改后的地址“
+
+## unsortedbin attack
+	释放离散的chunk，才会在unsortedbin中。
+### exploitation
+	1. 创建chunk0, 大小保证free后能够放进unsortedbin,紧接着创建chunk1。
+	2. free(chunk0), 此时chunk0的fd,bk都指向unsortedbin。
+		若存在堆溢出或uaf，能够修改chunk0的bk。
+		a. 那么我们将bk修改为target_addr - sizeof(ptr)*2。
+		b. 我们再申请一个和chunk0相同大小的空间，目标地址就会写入unsortedbin的地址，即达到泄露libc地址的效果。
+		c. 在后续的操作中，能再用到这个目标地址，也许就能够获取shell.
+
+---
 ## other
 ### dangling pointer
 	一些被free但未置0的悬挂指针。
+### main_arena
+	这是malloc()实现过程中的一个结构体，存储在libc段。
+```c
+	struct malloc_state {
+  /* Serialize access.  */
+  mutex_t mutex;
+ 
+  /* Flags (formerly in max_fast).  */
+  int flags;
+ 
+#if THREAD_STATS
+  /* Statistics for locking.  Only used if THREAD_STATS is defined.  */
+  long stat_lock_direct, stat_lock_loop, stat_lock_wait;
+#endif
+ 
+  /* Fastbins */
+  mfastbinptr      fastbins[NFASTBINS];
+ 
+  /* Base of the topmost chunk -- not otherwise kept in a bin */
+  mchunkptr        top;
+ 
+  /* The remainder from the most recent split of a small request */
+  mchunkptr        last_remainder;
+ 
+  /* Normal bins packed as described above */
+  mchunkptr        bins[NBINS * 2 - 2];
+ 
+  /* Bitmap of bins */
+  unsigned int     binmap[BINMAPSIZE];
+ 
+  /* Linked list */
+  struct malloc_state *next;
+ 
+  /* Memory allocated from the system in this arena.  */
+  INTERNAL_SIZE_T system_mem;
+  INTERNAL_SIZE_T max_system_mem;
+};
+```
+#### 利用
+	unsorted bins的第一个chunk的bk指向main_arena附近。
+	1. 获取bk的值。
+	2. 获取main_arena偏移量。 
+	3. 获取调试阶段的libc基址。
+	4. 它们的差值就是偏移量。
 
 ---

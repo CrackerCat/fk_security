@@ -1,19 +1,16 @@
 # ROP:  
-填充空间方法： 1> ida ; 2> gdb.  canary found是，触发check_failed(),ROP失效。  
+	当开启了NX时，可考虑ROP.
+	填充空间方法： 1> ida ; 2> gdb.  canary found是，触发check_failed(),ROP失效。  
 
 ## 栈溢出利用：  
-函数内局部变量利用，可覆盖这函数返回地址(返回地址后4/8个字节要清零) 或者  可以修改该函数内局部变量值。  
-注意：read 读取需要注意读取长度，需覆盖目标字段。fgets gets  
-32bit普通函数传参: ebp + 8h 第一个参数； ebp + 0ch 第二个参数 以此类推 ebp的位置是固定的  
-64bit普通函数传参: 参数和局部变量先存寄存器(rdi,rsi,rdx,rcx,r8,r9)(前六个参数)再存stack space(右边的存栈中)
-32bit syscall传参: eax对应于系统调用号，ebx，ecx,edx,esi,edi,ebp分别对应于前六个参数，多余的参数压在栈上。
-64bit syscall传参: rax对应于系统调用号，传参规则与普通函数传参一致。
+	32bit普通函数传参: ebp + 8h 第一个参数； ebp + 0ch 第二个参数 以此类推 ebp的位置是固定的  
+	64bit普通函数传参: 参数和局部变量先存寄存器(rdi,rsi,rdx,rcx,r8,r9)(前六个参数)再存stack space(右边的存栈中)
+	32bit syscall传参: eax对应于系统调用号，ebx，ecx,edx,esi,edi,ebp分别对应于前六个参数，多余的参数压在栈上。
+	64bit syscall传参: rax对应于系统调用号，传参规则与普通函数传参一致。
 ### syscall
 - execve()的调用号是0x3b
 - __libc_csu_init()有pop指令和ret指令,可以利用,用来构造ROP链。
-
-/bin/bash -> +7 就是sh  
-
+ 
 system() 是一个单参数的函数，汇编过程： push 参数地址(说明调用system之前，参数在栈顶);    call _system;  原因如下：  
 函数地址调用函数，参数入栈，[返回地址入栈，ip ->函数地址](call function),相当于ic语言调函数入栈的情况,参数入栈,call function入栈.  
 call function指令调用函数，将函数的返回地址入栈，ip指向函数开始处(函数地址). 开始进入函数体中，ebp入栈， esp = ebp, esp -**h (在call function之前参数已经入栈).  
@@ -22,20 +19,18 @@ call function指令调用函数，将函数的返回地址入栈，ip指向函�
 - 使用前提：未开启栈破坏检测（canary）和限制可执行代码区域。
 - 一般将注入的代码放到存在溢出的缓冲区中，再将其所在栈帧返回地址用其起始地址覆盖，如此栈帧在返回时%rip就会转向缓冲区的位置，再执行注入的指令。*特殊的情况*，可以在溢出的缓冲区中找可用的地址(参考2020_DASCTF的magic_number)。
 
-## 构建bin/sh  
-栈溢出：ret -> gets_addr --.bss--> binsh_addr --ret-> system_addr  
-
-
+---  
 ## libc函数利用：  
 - 1. 通过栈溢出泄露write,puts的运行地址got。  
 - 2. 利用libc里write,puts中的地址， 函数偏移地址不变，得到system的运行地址。  
 
+---
 ## canary  
 当函数返回之时检测canary的值是否经过了改变，以此判断stack/buffer overflow 是否发生。  
 canary 与 windows下的GS保护都是防止栈溢出的手段。  
 ### gcc 下使用canary  
--fstatck-protector-*  
--fno-stack-protector  
+- -fstatck-protector-*  
+- -fno-stack-protector  
 ### canary 实现原理  
 ![](image/canary_struct.png 'canary struct')  
 启用canary，函数体多了几个操作，取fs寄存器0x28处的值，存放在$ebp -0x8/0x4的位置，函数返回之前，再与fs:0x28的值异或。如果canary非法修改，会走__stack_chk_fail(glibc中的函数，打印stack smashing detected),默认延迟绑定。  
@@ -51,5 +46,12 @@ canary 设计为以0x00结尾，为了保证截断字符串。
 2. hyjack __stack_chk_failed,让它不完成该功能。hyjack got表，让它执行其他的函数，然而__stack_chk_fail不行，需要overwrite 尚未执行的stack_chk_failed的got表项。  
 3. 通过一些其他机制跳过canary的检查。如c++异常机制绕过canary检查。  
 
+---
+## ASLR
+	堆、栈、共享库的地址随机化。
+### 绕过技术
+	1. 利用其它未随机化的代码或数据，例如未开启PIE程序的数据段和代码段 或 vsyscall段。
+
+---
 ## other
 - red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。
