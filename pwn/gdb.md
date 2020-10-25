@@ -45,7 +45,7 @@
 ---
 
 ## pwndbg
-- $rebase(offset)
+- b *$rebase(offset)
 
 ## multi-arch gdb
 1. 交叉编译出(arch)-linux-gdb

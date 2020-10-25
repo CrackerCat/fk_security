@@ -50,7 +50,9 @@
 
 ### mprotect()
   修改一段指定内存区域的保护属性。
-  
+
+### prctrl
+  对进程进行操作。
 
 ### signal
 #### signal()

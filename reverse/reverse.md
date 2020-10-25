@@ -34,3 +34,7 @@
 1. MD5_Init(MD5_CTX *c) : 初始化 MD5 Contex, 成功返回1,失败返回0
 2. MD5_Update(MD5_CTX *c, const void *data, size_t len); : 循环调用此函数,可以将不同的数据加在一起计算MD5,成功返回1,失败返回0.
 3. MD5_Final(unsigned char *md, MD5_CTX *c); : 输出MD5结果数据,成功返回1,失败返回0
+
+## other
+### 函数以endbr指令开始
+- 运行fxxk_cet.py脚本破解，恢复函数签名。

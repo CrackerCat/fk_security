@@ -52,6 +52,26 @@ canary 设计为以0x00结尾，为了保证截断字符串。
 ### 绕过技术
 	1. 利用其它未随机化的代码或数据，例如未开启PIE程序的数据段和代码段 或 vsyscall段。
 
+## PIE
+	text,rodata,bss段地址随机化。
+### 绕过技术
+#### partial overwrite
+	由于内存的页载入机制，PIE的随机化只能影响到单个内存页。通常来说，一个内存页大小为0x1000，这就意味着不管地址怎么变，某条指令的后12位，3个十六进制数的地址是始终不变的。因此通过覆盖EIP的后8或16位 (按字节写入，每字节8位)就可以快速爆破或者直接劫持EIP。因此，每个函数之后的末尾三位是不同的。
+##### 爆破思路
+	爆破失败会导致程序奔溃，此时io会断开连接，因此调用io.recv()(在这之前必须没有可以收到的数据)会触发一个EOFError。由于这个特性，我们可以使用python的try...except...来捕获这个错误并进行处理。
+```python
+try:
+    io.recv(timeout=1)    
+except EOFError as e:
+    io.close()
+    continue
+else:
+    log.success("nice")
+    io.interactive()
+```
+##### reference
+- https://blog.csdn.net/wxh0000mm/article/details/90485711 : 详解
+
 ---
 ## other
 - red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。

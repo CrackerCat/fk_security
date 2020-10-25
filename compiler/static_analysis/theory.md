@@ -18,3 +18,8 @@
 ### reference
 - Control-Flow Integrity, CCS 2005. (控制流完整性机制的首次提出)
 - Control-flow integrity: Precision, security, and performance[J]. ACM Computing Surveys (CSUR), 2017, 50(1): 16. （对现有CFI机制的安全性和开销作出了系统的评价）
+
+## SMT Solver
+	SMT是寻找公式满足性（对变量取值使得某个公式成立），很多形式化验证问题可以转化为公式可满足性问题。
+### reference
+- z3工具.

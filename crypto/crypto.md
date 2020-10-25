@@ -85,6 +85,8 @@ public:
 
 ---
 ## convention cipher
+### OTP(one-time pad)
+	它是一种明文与共享密钥(与明文等长或者更长) 进行模加法运算。
 ### shift cipher
 #### caesar
   它是一种替换加密的技术，明文中的所有字母都在字母表上向后（或向前）按照一个固定数目进行偏移后被替换成密文。
@@ -94,7 +96,7 @@ public:
 
 ### transposition cipher
 ### affine cipher
-	带系数的shift cipher.
+	带系数的shift cipher.  (ax+b)mod n
 ### Rail Fence cipher
 	a rail fence of depth 2.
 
@@ -103,6 +105,8 @@ public:
 
 ---
 ## asymmetric cipher
+### EIGamal encryption
+	encrypt: (R,S)=(g^r mod p, m*B^r mod p)
 
 ---
 ## stream cipher
@@ -113,4 +117,6 @@ public:
 ### digital certificate
 	将用户id和公钥进行关联的技术。
 
+### 非对称密码和对称密码的差异
+	1. 对称密码适合对大数据进行加密，效率高，通常采用非对称加密对秘钥加密。
 ---

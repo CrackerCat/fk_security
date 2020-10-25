@@ -23,56 +23,53 @@ dll = ctypes.cdll.LoadLibrary() 引用动态库。
 
 ---
 ## checksec
-* NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
-* canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
-* PIE:地址随机化, data,code段都会变。 
-  * vsyscall段的地址不会变，可以将这个段dump出来，用ida分析，查看有哪些vsyscall。使用vsyscall必须从函数开头执行，这是因为vsyscall执行时会进行检查，如果不是函数开头执行的话就会出错。
-* RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
- * disabled got和plt都可写，fini_array也可写
- * partial(默认) got表可写，考虑劫持got表
- * fulled    load time的时候全部函数地址已经解析完成，不可写
-* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space
+	* NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
+	* canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
+	* PIE:地址随机化, data,code段都会变。 
+		* vsyscall段的地址不会变，可以将这个段dump出来，用ida分析，查看有哪些vsyscall。使用vsyscall必须从函数开头执行，这是因为vsyscall执行时会进行检查，如果不是函数开头执行的话就会出错。
+	* RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
+ 		* disabled got和plt都可写，fini_array也可写
+ 		* partial(默认) got表可写，考虑劫持got表
+ 		* fulled    load time的时候全部函数地址已经解析完成，不可写
+	* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space
+
+## /bin/sh的偏移查找           
+- strings -t x 可以查看在文件中字符串的0x偏移量  
+- libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()  / list(libc.search(b'/bin/sh'))[0]
+- readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .symtab(编译时所需符号信息)  
+- readelf -S 查看section header的information.  
+
+## pwntools    
+	elf模块： 静态加载ELF文件  
+	所谓的动态链接在linux中是延迟绑定技术，涉及了got表和plt表。  
+	plt表(程序链接表)：跳板，跳转到一个地址来加载libc库。文件中会对每个用到的外部函数分配一个plt函数(函数入口地址),可从ida中读出。不能修改。第一次调用外部函数，会进行解析函数。  
+	got表(全局偏移量的表，数据段.data中)：经过plt表的跳转会跳转会在got表上写入地址，这个地址是函数调用或变量的**内存真实地址**,所以表项大小跟地址一样大，覆盖它的时候不能大于表项的大小.  
+	注意：plt表只在程序调用函数之前有用，调用函数之后第二次执行这个函数就不会经过plt表。  
+	加载：动态链接文件加载时有时候会重新改变基地址但是偏移(8位地址的后4位是一样的)是不变的(寻址方式是基地址+偏移量)  
+	address 获取ELF的基址  
+	symbols 获取函数的地址(跟是否开启PIE有关) ,未开启就是偏移量  
     
-整型溢出： __int8等赋值修改变量。  
+	网络流传过来的需要u32解开,生成int类型地数据。  
     
-'x41' ='a'  
+	可执行文件往往是第一个被加载的文件，它可以选择一个固定空间的地址，比如Linux下一般都是0x0804000,windows下一般都是0x0040000  
+	共享的指令可以使用地址无关代码技术(PIC)，装载地址不变，跟地址相关部分放到数据段里面。  
     
-system的参数，可以通过gets，read, strcpy, strcat, sprintf读取任意字符串设置。  
+## linux 延迟绑定PLT  
+	动态链接器需要某个函数来完成地址绑定工作，这个函数至少要知道这个地址绑定发生在哪个模块 哪个函数，如lookup(module,function)。  
     
-strings -t x 可以查看在文件中字符串的0x偏移量  
-libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()  
-readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .symtab(编译时所需符号信息)  
-readelf -S 查看section header的information.  
+	在glibc中，lookup的函数真名叫做_dl_runtime_reolve(link_map,rel_offset)  
     
-elf模块： 静态加载ELF文件  
-所谓的动态链接在linux中是延迟绑定技术，涉及了got表和plt表。  
-plt表(程序链接表)：跳板，跳转到一个地址来加载libc库。文件中会对每个用到的外部函数分配一个plt函数(函数入口地址),可从ida中读出。不能修改。第一次调用外部函数，会进行解析函数。  
-got表(全局偏移量的表，数据段.data中)：经过plt表的跳转会跳转会在got表上写入地址，这个地址是函数调用或变量的**内存真实地址**,所以表项大小跟地址一样大，覆盖它的时候不能大于表项的大小.  
-注意：plt表只在程序调用函数之前有用，调用函数之后第二次执行这个函数就不会经过plt表。  
-加载：动态链接文件加载时有时候会重新改变基地址但是偏移(8位地址的后4位是一样的)是不变的(寻址方式是基地址+偏移量)  
-address 获取ELF的基址  
-symbols 获取函数的地址(跟是否开启PIE有关) ,未开启就是偏移量  
-    
-网络流传过来的需要u32解开,生成int类型地数据。  
-    
-可执行文件往往是第一个被加载的文件，它可以选择一个固定空间的地址，比如Linux下一般都是0x0804000,windows下一般都是0x0040000  
-共享的指令可以使用地址无关代码技术(PIC)，装载地址不变，跟地址相关部分放到数据段里面。  
-    
-linux 延迟绑定PLT  
-动态链接器需要某个函数来完成地址绑定工作，这个函数至少要知道这个地址绑定发生在哪个模块 哪个函数，如lookup(module,function)。  
-    
-在glibc中，lookup的函数真名叫做_dl_runtime_reolve(link_map,rel_offset)  
-    
-当我们调用某个外部模块时，调用函数并不直接通过GOT跳转，而是通过一个叫做PLT项的结构来进行跳转，每个外部函数在PLT中都有一个相应的项，比如bar()函数在PLT中的项地址叫做bar@plt，具体实现  
+	当我们调用某个外部模块时，调用函数并不直接通过GOT跳转，而是通过一个叫做PLT项的结构来进行跳转，每个外部函数在PLT中都有一个相应的项，比如bar()函数在PLT中的项地址叫做bar@plt，具体实现
+```  
 bar@plt：  
 jmp *(bar@GOT)  
 push n  
 push moduleID  
 jump _dl_runtime_resolve  
-    
-第一条指令是一条通过GOT间接跳转指令，bar@GOT表示GOT中保存bar()这个函数的相应项。  
-但是为了实现延迟绑定，连接器在初始化阶段没有将bar()地址填入GOT,而是将push n的地址填入到bar@GOT中，所以第一条指令的效果是跳转到第二条指令，相当于没有进行任何操作。第二条指令将n压栈，接着将模块ID压栈，跳转到_dl_runtime_resolve。实际上就是lookup(module,function)的调用。  
-_dl_runtime_resolve（link_map, rel_offset）在工作完成后将bar()真实地址填入bar@GOT中。  
+```    
+	第一条指令是一条通过GOT间接跳转指令，bar@GOT表示GOT中保存bar()这个函数的相应项。  
+	但是为了实现延迟绑定，连接器在初始化阶段没有将bar()地址填入GOT,而是将push n的地址填入到bar@GOT中，所以第一条指令的效果是跳转到第二条指令，相当于没有进行任何操作。第二条指令将n压栈，接着将模块ID压栈，跳转到_dl_runtime_resolve。实际上就是lookup(module,function)的调用。  
+	_dl_runtime_resolve（link_map, rel_offset）在工作完成后将bar()真实地址填入bar@GOT中。  
 ```
 typedef uint32_t Elf32_Addr;
 typedef uint32_t Elf32_Word;
@@ -102,12 +99,10 @@ char *sym_name = STRTAB + sym_entry->st_name;
 由此名称，搜索动态库。找到地址后，填充至.got.plt对应位置。最后调整栈，调用这一解析得到的函数。
 
 ```
-一旦bar（）解析完毕，再次调用bar@plt时，直接就能跳转到bar()的真实地址。  
+	一旦bar（）解析完毕，再次调用bar@plt时，直接就能跳转到bar()的真实地址。  
     
-PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。  
-    
-数组越界漏洞利用。  
-    
+	PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。  
+          
 ---
 ## static link  
 静态编译的代码在同一架构上都能运行。IDA 红色部分为外部函数  
@@ -177,6 +172,23 @@ obj.dump("system")        #system 偏移
 obj.dump("str_bin_sh")    #/bin/sh 偏移
 obj.dump("__libc_start_main_ret")    
 ```
+
+## patchelf
+	修改elf .interp 节内容, 工具链接： patchelf：https://github.com/NixOS/patchelf。
+### usage
+	patchelf --set-interpreter /ld_path/ld-2.27.so --set-rpath /libc_path/ filename
+		* --set-interpreter：是设置ld解释器，精确到文件（ld-linux-x86-64.so.2 和 ld-2.27.so都行）
+		*  --set-rpath：是设置 libc.so.6 的目录，文件名称默认是 libc.so.6，所以如果使用 libc-2.27.
+### glibc-all-in-one
+	下载ld和libc的工具，链接：https://github.com/matrix1001/glibc-all-in-one
+#### usage
+	1. # 获取能下载的版本列表
+        ./update_list
+    2. # 查看列表
+        cat list
+    3. # 下载列表中的版本
+        ./download_old 2.24-3ubuntu2.2_amd64（与列表中名称一致）
+        
     
 ## shellcode: 填入某个位置充当指令。  
 https://www.exploit-db.com/shellcodes  

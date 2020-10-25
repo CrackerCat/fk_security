@@ -21,6 +21,10 @@
 - ip.src/dst  
 - tcp.port
 
+## sqlmap
+- sqlmap -u url --batch -a : sql注入
+- sqlmap -r post.txt --batch -a : post请求注入
+
 ## suricata
   一种一种基于规则的IDS工具，检测各种网络攻击手段，记录攻击流量。
 
