@@ -3,6 +3,10 @@
 ### 有限域GF
 	若p为素数，GF(p)={0,1,2,...,p-1}
 	生成元g的有限域(阶为q) = {0,g^0,g^1,...,g^(q-2)}
+	Z*p 是与p互素且小于p的集合。
+### 群
+#### 循环群
+	a∈群G,其他元素可以用a^k表示，其中a可以称作群的生成元或原根。
 
 ### division algorithm
 	divide a by n -> a = q*n + r -> 0<=r<n; q=floor(a/n)
@@ -13,6 +17,7 @@
 
 ### primitive root 本原根
 	素数p的原根定义：如果a是素数p的原根，则数a mod p, a^2 mod p, … , a^(p-1) mod p 是不同的并且包含1到p-1的整数的某种排列。
+
 ### gcd
 	gcd(a,b) = gcd(a,-b) = gcd(-a,b) = gcd(-a,-b)=max[k, such that k | a and k | b]	
 
@@ -35,6 +40,7 @@ B2 就是逆元
 
 ### 质数筛选算法：The Sieve of Eratosthenes(埃拉托色尼筛选法)
 	计算某一范围的质数个数。埃拉托色尼筛选法基于一项基本性质：任何大于1的自然数，要么本身是质数，要么可以分解为几个质数之积，且这种分解是唯一的。
+    
 #### 思路
 	假设从起点开始（起点可由要求指定）的所有数都是质数。从起点开始向前搜寻，若为质数，则将其倍数（不超过上界n）标记为非质数。例如2为质数，则标记4，6，8, ...这些2的倍数都为非质数，然后标记下一个……依此类推。
 ```
@@ -107,15 +113,28 @@ public:
 ## asymmetric cipher
 ### EIGamal encryption
 	encrypt: (R,S)=(g^r mod p, m*B^r mod p)
+### RSA encryption
+	已知两个大素数p,q,n=pq,phi(n)=(p-1)(q-1).
+	1. 任取大整数e,满足gcd(e,phi(n))=1.  公钥=(n,e)
+	2. 确定私钥d，(d*e)mod(phi(n))=1.
+	3. 加密：c=m^e mod n
+	4. 解密：m=c^d mod n
 
 ---
 ## stream cipher
 	一次加密一字节或一位数据。
+### Vernam cipher
+	Vernam密码是一种对称的流密码，其中，明文与相同长度的随机或伪随机数据流（“密钥流”）组合在一起，以使用布尔值 “ exclusive or”（ XOR）功能。
 
+## MAC
+	带密钥的hash函数。
 ---
 ## application of cryptography
 ### digital certificate
 	将用户id和公钥进行关联的技术。
+	大多数是Cert=(K(pub),ID,sig(K(pub),ID))
+### certifying authority(CA)
+	分发证书的可信组织。
 
 ### 非对称密码和对称密码的差异
 	1. 对称密码适合对大数据进行加密，效率高，通常采用非对称加密对秘钥加密。

@@ -9,6 +9,11 @@
   - Image Combiner:拼图，图片拼接
 - 十六进制串转字符串 : https://www.bejson.com/convert/ox2str/
 - crc校验码计算 ： http://www.ip33.com/crc.html
+- binwalk : 固件分析利器，它被设计用于识别嵌入固件镜像内的文件和代码，搜索给定二进制镜像文件以获取嵌入的文件和代码的工具。
+  - reference : https://blog.csdn.net/wxh0000mm/article/details/85683661
+- firmware-mod-kit
+- john : 基于字典的密码破解工具,用于在已知密文的情况下尝试破解出明文的破解密码软件，主要目的是破解不够牢固的 Unix/Linux 系统密码。
+	- reference : https://blog.csdn.net/Blue_Starry_sky/article/details/61206488
 
 ## file
 ### rar

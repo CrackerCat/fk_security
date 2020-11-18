@@ -34,3 +34,10 @@
 ## JSON
 ### JSON format
   {"field1":value1,"field2":value2,...}
+
+## attack
+### XSS
+	将恶意代码注入进系统，让其触发。
+#### countermeasurement
+	1. whitelist
+	2. blacklist

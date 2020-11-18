@@ -8,6 +8,7 @@
 * 四个空格或者一个制表符 ： 列表项目的段落格式  
 * <sup>num</sup> : 上标
 * <sub>num</sub> : 下标
+* `text` : 高亮
 
 ---
 ## refrence

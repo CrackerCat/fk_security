@@ -278,6 +278,70 @@ INTERNAL_SIZE_T max_system_mem;
 	- 2. 索引从 2 到 63 的 bin 称为 small bin，同一个 small bin 链表中的 chunk 的大小相同。两个相邻索引的 small bin 链表中的 chunk 大小相差的字节数为 2 个机器字长(size_t)，即 32 位相差 8 字节，64 位相差 16 字节。  
 	- 3. small bins 后面的 bin 被称作 large bins。large bins 中的每一个 bin 都包含一定范围内的 chunk，其中的 chunk 按 fd 指针的顺序从大到小排列。相同大小的 chunk 同样按照最近使用顺序排列。  
 	ptmalloc 为了提高分配的速度，会把一些小的 chunk 先放到 fast bins 的容器内。而且，fastbin 容器中的 chunk 的使用标记总是被置位的，所以不满足上面的原则。    
+### Tcache
+	Tcache的引入是从Glibc2.26开始的, 是一个为了内存分配速度而存在的机制，当size不大（这个程度后面讲）堆块free后，不会直接进入各种bin，而是进入tcache，如果下次需要该大小内存，直接讲tcache分配出去，跟fastbin蛮像的，但是其size的范围比fastbin大多了，他有64个bin链数组，也就是(64+1)*size_sz*2，在64位系统中就是0x410大小。也就是说，在64位情况下，tcache可以接受0x20~0x410大小的堆块。
+#### Tcache 重要结构体及函数
+* tcache_entry struct
+
+```
+* We overlay this structure on the user-data portion of a chunk when the chunk is stored in the per-thread cache.  */
+typedef struct tcache_entry
+{
+  struct tcache_entry *next;
+} tcache_entry;
+```
+* tcache_perthread_struct struct
+
+```
+/* There is one of these for each thread, which contains the per-thread cache (hence "tcache_perthread_struct").  Keeping overall size low is mildly important.  Note that COUNTS and ENTRIES are redundant (we could have just counted the linked list each time), this is for performance reasons.  */
+typedef struct tcache_perthread_struct
+{
+  char counts[TCACHE_MAX_BINS];
+  tcache_entry *entries[TCACHE_MAX_BINS];
+} tcache_perthread_struct;
+
+static __thread tcache_perthread_struct *tcache = NULL;
+```
+
+* tcache_get() 和 tcache_put()
+
+```c
+static void *
+tcache_get (size_t tc_idx)
+{
+  tcache_entry *e = tcache->entries[tc_idx];
+  assert (tc_idx < TCACHE_MAX_BINS);
+  assert (tcache->entries[tc_idx] > 0);
+  tcache->entries[tc_idx] = e->next;
+  --(tcache->counts[tc_idx]);
+  return (void *) e;
+}
+
+static void
+tcache_put (mchunkptr chunk, size_t tc_idx)
+{
+  tcache_entry *e = (tcache_entry *) chunk2mem (chunk);
+  assert (tc_idx < TCACHE_MAX_BINS);
+  e->next = tcache->entries[tc_idx];
+  tcache->entries[tc_idx] = e;
+  ++(tcache->counts[tc_idx]);
+}
+```
+	这两个函数会在函数 _int_free 和 __libc_malloc 的开头被调用，其中 tcache_put 当所请求的分配大小不大于0x408并且当给定大小的 tcache bin 未满时调用。一个 tcache bin 中的最大块数mp_.tcache_count是7。
+	在 tcache_get 中，仅仅检查了 tc_idx ，此外，我们可以将 tcache 当作一个类似于 fastbin 的单独链表，只是它的 check，并没有 fastbin 那么复杂，连size域都没检查，仅仅检查 tcache->entries[tc_idx] = e->next;
+#### 内存释放与分配
+##### 内存释放
+	在 free 函数的最先处理部分，首先是检查释放块是否页对齐及前后堆块的释放情况，便优先放入 tcache 结构中。
+##### 内存分配
+	在内存分配的 malloc 函数中有多处，会将内存块移入 tcache 中。
+	（1）首先，申请的内存块符合 fastbin 大小时并且在 fastbin 内找到可用的空闲块时，会把该 fastbin 链上的其他内存块放入 tcache 中。
+	（2）其次，申请的内存块符合 smallbin 大小时并且在 smallbin 内找到可用的空闲块时，会把该 smallbin 链上的其他内存块放入 tcache 中。
+	（3）当在 unsorted bin 链上循环处理时，当找到大小合适的链时，并不直接返回，而是先放到 tcache 中，继续处理。
+##### tcache 取出
+	在内存申请的开始部分，首先会判断申请大小块，在 tcache 是否存在，如果存在就直接从 tcache 中摘取，否则再使用_int_malloc 分配。 
+	在循环处理 unsorted bin 内存块时，如果达到放入 unsorted bin 块最大数量，会立即返回。默认是 0，即不存在上限。
+	在循环处理 unsorted bin 内存块后，如果之前曾放入过 tcache 块，则会取出一个并返回。
+
 ### fast bin  
 	glibc 采用单向链表对每个 fast bin 进行组织，并且每个 bin 采取 LIFO 策略(头插法），最近释放的 chunk 会更早地被分配.ptmalloc 默认情况下会调用 set_max_fast(s) 将全局变量 global_max_fast 设置为 DEFAULT_MXFAST，也就是设置 fast bins 中 chunk 的最大值。  
 	\# define DEFAULT_MXFAST (64 * SIZE_SZ / 4) ->  64 * SIZE_SZ/4 - SIZE_SZ*2 是最大长度, 64bit=0x70 32bit=0x38  
@@ -524,6 +588,32 @@ errout:
 	1. 通过这种攻击修改循环的次数来使得程序可以执行多次循环。	
 	2. 修改 heap 中的 global_max_fast 来使得更大的 chunk 可以被视为 fast bin，这样我们就可以去执行一些 fast bin attack了。
 
+## Tcache attack
+### Tcache poisoning
+	**在2.27的环境下是可以直接做到任意地址写的**，这一点非常nice, 这种利用方法，在也被叫做tcache  poisoning。同时，在double free领域，Tcache可以直接double free，而不需要像fastbin那样，需要和链上上一个堆块不一样,也就是下面这个样子。
+	通过覆盖 tcache 中的 next，不需要伪造任何 chunk 结构即可实现 malloc 到任何地址。
+```
+/*
+ heap0 ----> heap1 ----> heap0 (fastbin YES)
+ heap0 ----> heap0 (fastbin NO)
+ heap0 ----> heap0 (Tcahce YES)
+ */
+```
+	还有一点不同，就是在Tcache中，fd指向的并不是堆头，而是堆内容，这一点也是需要我们注意的。
+#### leak libc
+	常用方法如下：
+	1. 申请8个大堆块，释放8个，这里堆块大小，大于fastbin范围，就是填满tcache。
+	2. 有double free的情况下，连续free 8次同一个堆块，这里堆块大小，大于fastbin范围。
+	3. 申请大堆块，大于0x410。
+	4. 修改堆上的Tcache管理结构
+#### Tcache double free
+	* 2.27的环境
+		实现任意地址写。
+		1. add(0);
+		2. free(0);free(0)
+		3. add(0, target_addr);add(0, target_addr);add(0, any_value);
+### reference
+- https://www.freebuf.com/articles/system/234219.html : 解释性文章。
 ## fake chunk
 - hook-19附近有一个size为0x7f的fakechunk.
 - io附近有个0x7f的fakechunk.
@@ -581,7 +671,7 @@ errout:
 
 ### glibc
 - 2.23最经典
-- 2.27加入tcache
+- 2.26加入tcache
 - 2.29增加tcache限制，几乎不能offbynull,也不能unsortedbin attack
 - 2.31修了largebin attack.
 ---

@@ -8,18 +8,16 @@
 - recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
 - recv(byte_num)
 - recvuntil(str)
+- p = process(["/path/to/ld.so", "./test"], env={"LD_PRELOAD":"/path/to/libc.so.6"}) : 本地运行
 
----
-## python3
-  bytes2str: bytes.decode(bytes, encoding='iso8859-1')
+### python3
+	bytes2str: bytes.decode(bytes, encoding='iso8859-1')
 
 ---
 ## 基础知识  
-- x86 按字节编制，字节序：低字节放低地址  
-    
-随机数（伪随机数)利用： seed不变,随机数序列不变。  
-    
-dll = ctypes.cdll.LoadLibrary() 引用动态库。  
+- x86 按字节编制，字节序：低字节放低地址   
+- 随机数（伪随机数)利用： seed不变,随机数序列不变。    
+- dll = ctypes.cdll.LoadLibrary() 引用动态库。  
 
 ---
 ## checksec
@@ -59,6 +57,7 @@ dll = ctypes.cdll.LoadLibrary() 引用动态库。
     
 	在glibc中，lookup的函数真名叫做_dl_runtime_reolve(link_map,rel_offset)  
     
+	.plt段是可执行可读的。
 	当我们调用某个外部模块时，调用函数并不直接通过GOT跳转，而是通过一个叫做PLT项的结构来进行跳转，每个外部函数在PLT中都有一个相应的项，比如bar()函数在PLT中的项地址叫做bar@plt，具体实现
 ```  
 bar@plt：  
@@ -101,34 +100,45 @@ char *sym_name = STRTAB + sym_entry->st_name;
 ```
 	一旦bar（）解析完毕，再次调用bar@plt时，直接就能跳转到bar()的真实地址。  
     
-	PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。  
+	PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。 
+### reference
+- https://evilpan.com/2018/04/09/about-got-plt/#%E5%A4%A7%E5%B1%80%E8%A7%82 : 深入了解动态链接 
           
 ---
 ## static link  
-静态编译的代码在同一架构上都能运行。IDA 红色部分为外部函数  
-函数符号需要重新签名.  
-static link 可以使用ROPgadget 生成 ROP chain  
+	静态编译的代码在同一架构上都能运行。IDA 红色部分为外部函数  
+	函数符号需要重新签名.  
+	static link 可以使用ROPgadget 生成 ROP chain  
    
 --- 
 ## gdb调试  
-context.terminal = ['tmux','sp','-h'] //当无图形时  
-gdb.attach(p, 'gdb cmd') :  
-context.log_level = 'debug'  
-log.success()  
-log.info()
+	context.terminal = ['tmux','sp','-h'] //当无图形时  
+	gdb.attach(p, 'gdb cmd') :  
+	context.log_level = 'debug'  
+	log.success()  
+	log.info()
   
 ---  
 ## 栈溢出的简化计算：  
-cyclic(0x100):生成0x100大小的pattern  
-cyclic_find(0x61616161/'aaaa')：查找该数据在pattern的位置  
+	cyclic(0x100):生成0x100大小的pattern  
+	cyclic_find(0x61616161/'aaaa')：查找该数据在pattern的位置  
     
 ## ROPGadget 查看特殊代码段的工具  
-ROPGaget --binary exe --only/--string "pop | ret(instruction)"  
-ROPgadget --binary binary --ropchain 获取static execute ROP chain.  
+	ROPGaget --binary exe --only/--string "pop | ret(instruction)"  
+	ROPgadget --binary binary --ropchain 获取static execute ROP chain.  
     
 ---
 ## one-gadget in glibc
 	one-gadget 是glibc里调用execve('/bin/sh', NULL, NULL)的一段非常有用的gadget, 但是需要满足约束条件。
+### install
+	1. ruby install one_gadget
+	OR
+	2. pip3 install one_gadget
+```py
+from one_gadget import generate_one_gadget_full
+for x,constraint in generate_one_gadget_full(LIBC):
+	print((x),'\t',constraint)
+```
 ### 绕过constraint
 	通过调试，查看调用one-gadget时的寄存器以及堆栈信息。
 ### one-gadget+malloc_hook+realloc_hook
@@ -150,18 +160,52 @@ sub rsp, 18h
 
 ---
 ## 系统调用获取shell  
-当没有system()函数时  
-linux: int 0x80 用于系统调用。  
-只要我们把对应获取shell的系统调用的参数放到对应的寄存器中(指令地址+pop栈元素)，我们就能执行对应的系统调用。  
-当存在栈溢出ROP时，可以将返回地址指向int 0x80指令的地址，再修改相应寄存器的地址(通过ROPgadget获得)  
+	当没有system()函数时  
+	linux: int 0x80/syscall 用于系统调用。  
+	只要我们把对应获取shell的系统调用的参数放到对应的寄存器中(指令地址+pop栈元素)，我们就能执行对应的系统调用。  
+	当存在栈溢出ROP时，可以将返回地址指向int 0x80指令的地址，再修改相应寄存器的地址(通过ROPgadget获得)  
 ![](image/ROP_syscall.png "ROP syscall")  
 ![](image/syscall.png "disassemble syscall")  
 ---
 
-## LibcSearcher
-  这是针对CTF比赛所做的小工具，在泄露了Libc中的某一个函数地址后，常常为不知道对方所使用的操作系统及libc的版本而苦恼，常规方法就是挨个把常见的Libc.so从系统里拿出来，与泄露的地址对比一下最后12位。
-  这个工具可以让我们获取到程序正在使用的libc文件中每个函数或字符串的偏移。
-  当libc文件不准确时，可以用这个工具。
+## DynELF
+	是pwntools中专门用来应对没有libc情况的漏洞利用模块，在提供一个目标程序任意地址内存泄漏函数的情况下，可以解析任意加载库的任意符号地址,其中涉及ELF文件中的hash表、动态符号表、字符串表、Dynamic段，以及link_map结构等内容。
+### 获取 ELF_PROGRAM 内存
+	已知vul_elf加载内存范围内的一个地址ptr，将该地址进行页对齐。
+```
+page_size = 0x1000
+page_mask = ~(page_size - 1)
+ptr &= page_mask
+```
+	然后对比内存页起始字符串是否为'\x7fELF'，如果不是，一直向低地址内存页(ptr -= page_size)进行查找，找到符合该条件的页面，该页面起始地址就是vul_elf文件内存加载基地址。
+### 获取 libc.so 内存加载基地址
+	vul_elf是动态链接的可执行文件，在该类型文件中有一个link_map双向链表，其中包含了每个动态加载的库的路径和加载基址等信息，其数据结构为：
+```c
+struct link_map
+{
+   /* Shared library's load address. 模块基地址*/ 
+   ElfW(Addr) l_addr;                 
+   /* Pointer to library's name in the string table. 字符串*/                                 
+   char *l_name;    
+   /* 
+        Dynamic section of the shared object.
+        Includes dynamic linking info etc.
+        Not interesting to us.  
+		该模块Dynamic段基地址
+   */                   
+   ElfW(Dyn) *l_ld;   
+   /* Pointer to previous and next link_map node. */                 
+   struct link_map *l_next, *l_prev;   
+};
+```
+### 获取libc.so的hash表、动态符号表、字符串表基地址
+	在所有需要导出函数给其他文件使用的ELF文件（例如: “libc.so”）中，用动态符号表、字符串表、hash表等一系列表用于指示导出符号（例如:”system”）的名称、地址、hash值等信息。通过libc.so的Dynamic段DT_GNU_HASH、DT_SYMTAB、DT_STRTAB可以获取hash表、动态符号表、字符串表在内存中的基地址。
+### 通过hash表获取system函数地址
+	hash表是用于查找符号的散列表，通过libc.so的hash表可以找到system函数内存加载地址，在ELF文件中有SYSV、GNU两种类型的hash表。
+### LibcSearcher
+	这是针对CTF比赛所做的小工具，在泄露了Libc中的某一个函数地址后，常常为不知道对方所使用的操作系统及libc的版本而苦恼，常规方法就是挨个把常见的Libc.so从系统里拿出来，与泄露的地址对比一下最后12位。
+	这个工具可以让我们获取到程序正在使用的libc文件中每个函数或字符串的偏移。
+	当libc文件不准确时，可以用这个工具。
 ```py
 from LibcSearcher import *
 
@@ -191,17 +235,21 @@ obj.dump("__libc_start_main_ret")
         
     
 ## shellcode: 填入某个位置充当指令。  
-https://www.exploit-db.com/shellcodes  
-pwntools  asm(shellcraft.sh())  
-asm(shellcraft.linux.sh()) getshell 注：shellcraft.linux.sh()是getshell的汇编指令,asm进行汇编，返回字符串。  
+- https://www.exploit-db.com/shellcodes  
+- pwntools  asm(shellcraft.sh())  
+- asm(shellcraft.linux.sh()) getshell 注：shellcraft.linux.sh()是getshell的汇编指令,asm进行汇编，返回字符串。  
          
 ## other  
-函数指针，可以使用shellcode的地址  
-strcpy, 会将'x00'也拷贝过去。  
-strlen, 遍历到'x00'终止  
-vmmap 可用来看哪些空间可读写，执行。  
-objdump -d binary 反汇编二进制  
-
+- 函数指针，可以使用shellcode的地址  
+- strcpy, 会将'x00'也拷贝过去。  
+- strlen, 遍历到'x00'终止  
+- vmmap 可用来看哪些空间可读写，执行。  
+- objdump -d binary 反汇编二进制  
+- execve获取shell，参数得满足一些条件
+ - argv和envp的数组得以0x0结尾
+- libc版本猜测
+	- double free
+		若报错则不是2.27版本的libc。通过泄露libc地址，比对后12位地址判断版本。
 
 ## model
 ```python

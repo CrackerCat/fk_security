@@ -11,13 +11,14 @@
 - vmmap 查看进程中的权限及地址范围  
 - bt backtrace 函数调用路径,可查看当前运行到哪一行
 - break line-or-function if expr 条件断点
-- set var $reg/addr=value  修改变量值  
+- set var $reg/*addr=value  修改变量值  
 - list <linenum>/<function>/<first>,<last>/,<last>/-/+/empty  显示源代码(-g)  
 - until 执行完循环
 - call func(para list)  调用函数
 - display expression  在每一次单步调试都会打印expression的值
 - watch expression 一旦表达式的值改变就会中止程序
 - info locals
+- info r : 打印寄存器
 - ret 直接返回，不执行完剩余指令
 - fin 完成当前函数的执行
 - got/plt 打印got/plt
@@ -42,10 +43,12 @@
 ## gdb argument
 - gdb --args program arg1 arg2 ... 带参调试
 - command/x 使用命令文件自动化调试
+- ulimit -c size 设置coredump文件大小； gdb binary core_dump :  可加载core文件确认错误位置。
+- 程序收到SIGSEGV信号，触发段错误，并提示地址。
 ---
 
 ## pwndbg
-- b *$rebase(offset)
+- b *$rebase(offset)，需要在running阶段使用。
 
 ## multi-arch gdb
 1. 交叉编译出(arch)-linux-gdb

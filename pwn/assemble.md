@@ -23,11 +23,12 @@
 * jge 前大于等于后
 * jnb 前不低于后
 * jl(jmp less)=jnge : 小于则转移，用于有符号数的条件转移
-* cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数  
-* test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。
+* cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数。cmp 算术减法运算结果为零,就把ZF(零标志)置1.
+* test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。test逻辑与运算结果为零,就把ZF(零标志)置1; 
 * add src des <=> des = des + src
 * sub des src <=> des = des - src
 * rep ret 解决ret的分支预测问题。 [rep详解](http://repzret.org/p/repzret/ "rep")
+* rep stosb/stosw/stosd 这三个指令把al/ ax/ eax的内容存储到edi指向的内存单元中，同时edi的值根据方向标志的值增加或者减少。这组指令需要以指定的字符填充整个字符串或数组时比较有用.
 * cltq %eax->%rax的符号拓展转换 <=> movslq(s符号 l双字  q四字) %eax,%rax
 * int(32bit)/syscall(64bit) 系统中断 配合寄存器调用函数
 * movl -8(%eax, %edx, 4), %ecx EDX乘以4再减去8，加到EAX，從該地址的內存中讀取4字節的值，並放入ECX中
@@ -36,7 +37,7 @@
 * shl des offset : 逻辑左移, 最低位用0补充,将最后移出的一位写入CF中,如果移动位数大于1时，必须将移动位数放在cl中。
 * shr : 同理,逻辑右移
 * sar : 算数右移, 保留操作数的符号，即用符号位来补足，而SHR右移时总是用0来补足.
-
+* loop : loop指令会使每循环一次，cx就对自身值减1操作，直到等于0为止，在此之前，一直重复执行标识符到loop间的代码. a. (cx)=(cx)-1； b. 判断cx中的值不为零则转至标号处执行程序如果为零则向下执行。
 
 ### 几个术语
 * 字节：8位，后缀：b
@@ -93,7 +94,7 @@ ia32: intel architeture 32 bit
 ![](image/x86_64_register.png "x86_64 register")
 64bit: %rax, %rdx, %rdx, %rbx, %rsi, %rdi, %rsp, %rbp, %r8-%r15.
 访问低32bit/16bit/8bit register可以直接访问, 跟ia32类似,例如 %eax/%ax/%al.
- 
+用户态，cs寄存器=0x33，不能修改。
 
 ---
 ## other  
