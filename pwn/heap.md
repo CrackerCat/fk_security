@@ -59,11 +59,78 @@
 		2. 检查victim的大小是否满足.(2*SIZE_SZ, av->system_mem]
 		3. 检查大小是否符合smallbin,最后一个chunk的前一个chunk是否是unsortedbin，victim是否是av->last_remainder, size是否合法，则走另一个流程。
 		4. remove最后一个chunk。
-
+### smallbin malloc
+```
+/* 
+     If a small request, check regular bin.  Since these "smallbins" 
+     hold one size each, no searching within bins is necessary. 
+     (For a large request, we need to wait until unsorted chunks are 
+     processed to find best fit. But for small ones, fits are exact 
+     anyway, so we can check now, which is faster.) 
+   */  
+  
+  if (in_smallbin_range (nb))  
+    {  
+      idx = smallbin_index (nb);  
+      bin = bin_at (av, idx);  
+  
+      if ((victim = last (bin)) != bin) //取该索引对应的small bin中最后一个chunk  
+        {  
+          bck = victim->bk;  //获取倒数第二个chunk  
+      if (__glibc_unlikely (bck->fd != victim)) //检查双向链表完整性  
+        malloc_printerr ("malloc(): smallbin double linked list corrupted");  
+          set_inuse_bit_at_offset (victim, nb);  
+          bin->bk = bck; //将victim从small bin的链表中卸下  
+          bck->fd = bin;  
+  
+          if (av != &main_arena)  
+        set_non_main_arena (victim);  
+          check_malloced_chunk (av, victim, nb);  
+#if USE_TCACHE  
+      /* While we're here, if we see other chunks of the same size, 
+         stash them in the tcache.  */  
+      size_t tc_idx = csize2tidx (nb); //获取对应size的tcache索引  
+      if (tcache && tc_idx < mp_.tcache_bins) //如果该索引在tcache bin范围  
+        {  
+          mchunkptr tc_victim;  
+  
+          /* While bin not empty and tcache not full, copy chunks over.  */  
+          while (tcache->counts[tc_idx] < mp_.tcache_count  //当tcache bin不为空并且没满，并且small bin不为空，则依次取最后一个chunk插入到tcache bin里  
+             && (tc_victim = last (bin)) != bin)  
+        {  
+          if (tc_victim != 0)  
+            {  
+              bck = tc_victim->bk;  
+              set_inuse_bit_at_offset (tc_victim, nb);  
+              if (av != &main_arena)  
+            set_non_main_arena (tc_victim);  
+              bin->bk = bck; //将当前chunk从small bin里卸下  
+              bck->fd = bin;  
+                      //放入tcache bin里  
+              tcache_put (tc_victim, tc_idx);  
+                }  
+        }  
+        }  
+#endif  
+          void *p = chunk2mem (victim);  
+          alloc_perturb (p, bytes);  
+          return p;  
+        }  
+    }
+```
+	从2.27上述smallbin malloc代码可知:
+		1. 检查申请大小。
+		2. 检查最后一个元素的完整性，即它的bck->fd是不是victim。
+		3. 移除最后一个元素。
+		若支持tcache，
+		4. 检查tcache是否为空指针 并且 idx是不是小于mp_.tcache.bins。
+		5. 检查相应idx的tcache是否满 并且 最后一个元素是否是smallbin, 条件满足则全放入tcache。
+		6. 返回指针。
 ---
   
 ## calloc  
   与 malloc 的区别是 calloc 在分配后会自动进行清空，这对于某些信息泄露漏洞的利用来说是致命的。  
+  calloc 分配堆块时不从 tcache bin 中选取.
 
 ---
   
@@ -279,7 +346,7 @@ INTERNAL_SIZE_T max_system_mem;
 	- 3. small bins 后面的 bin 被称作 large bins。large bins 中的每一个 bin 都包含一定范围内的 chunk，其中的 chunk 按 fd 指针的顺序从大到小排列。相同大小的 chunk 同样按照最近使用顺序排列。  
 	ptmalloc 为了提高分配的速度，会把一些小的 chunk 先放到 fast bins 的容器内。而且，fastbin 容器中的 chunk 的使用标记总是被置位的，所以不满足上面的原则。    
 ### Tcache
-	Tcache的引入是从Glibc2.26开始的, 是一个为了内存分配速度而存在的机制，当size不大（这个程度后面讲）堆块free后，不会直接进入各种bin，而是进入tcache，如果下次需要该大小内存，直接讲tcache分配出去，跟fastbin蛮像的，但是其size的范围比fastbin大多了，他有64个bin链数组，也就是(64+1)*size_sz*2，在64位系统中就是0x410大小。也就是说，在64位情况下，tcache可以接受0x20~0x410大小的堆块。
+	Tcache的引入是从Glibc2.26开始的, 是一个为了内存分配速度而存在的机制，当size不大（这个程度后面讲）堆块free后，不会直接进入各种bin，而是进入tcache，如果下次需要该大小内存，直接讲tcache分配出去，跟fastbin蛮像的，但是其size的范围比fastbin大多了，他有64个bin链数组(按size_sz*2增长)，也就是(64+1)*size_sz*2(>64*size_sz*2)，在64位系统中就是0x410大小。也就是说，在64位情况下，tcache可以接受0x20~0x410大小的堆块。
 #### Tcache 重要结构体及函数
 * tcache_entry struct
 
@@ -327,7 +394,7 @@ tcache_put (mchunkptr chunk, size_t tc_idx)
   ++(tcache->counts[tc_idx]);
 }
 ```
-	这两个函数会在函数 _int_free 和 __libc_malloc 的开头被调用，其中 tcache_put 当所请求的分配大小不大于0x408并且当给定大小的 tcache bin 未满时调用。一个 tcache bin 中的最大块数mp_.tcache_count是7。
+	这两个函数会在函数 _int_free 和 __libc_malloc 的开头被调用，其中 tcache_put 当所请求的分配大小不大于0x408并且当给定大小的 tcache bin 未满时调用。一个 tcache bin(某一个大小) 中的最大块数mp_.tcache_count是7, 超过7就不放入tcache中。
 	在 tcache_get 中，仅仅检查了 tc_idx ，此外，我们可以将 tcache 当作一个类似于 fastbin 的单独链表，只是它的 check，并没有 fastbin 那么复杂，连size域都没检查，仅仅检查 tcache->entries[tc_idx] = e->next;
 #### 内存释放与分配
 ##### 内存释放
@@ -592,6 +659,7 @@ errout:
 ### Tcache poisoning
 	**在2.27的环境下是可以直接做到任意地址写的**，这一点非常nice, 这种利用方法，在也被叫做tcache  poisoning。同时，在double free领域，Tcache可以直接double free，而不需要像fastbin那样，需要和链上上一个堆块不一样,也就是下面这个样子。
 	通过覆盖 tcache 中的 next，不需要伪造任何 chunk 结构即可实现 malloc 到任何地址。
+	可以看出 tcache posioning 这种方法和 fastbin attack 类似，但因为没有 size 的限制有了更大的利用范围。
 ```
 /*
  heap0 ----> heap1 ----> heap0 (fastbin YES)
@@ -602,7 +670,8 @@ errout:
 	还有一点不同，就是在Tcache中，fd指向的并不是堆头，而是堆内容，这一点也是需要我们注意的。
 #### leak libc
 	常用方法如下：
-	1. 申请8个大堆块，释放8个，这里堆块大小，大于fastbin范围，就是填满tcache。
+	1. 申请8个大堆块，释放8个，这里堆块大小，大于fastbin范围，就是填满tcache（tcachebin默认7)。
+		a. 2.27版本 可以是释放同一个的堆块。
 	2. 有double free的情况下，连续free 8次同一个堆块，这里堆块大小，大于fastbin范围。
 	3. 申请大堆块，大于0x410。
 	4. 修改堆上的Tcache管理结构
@@ -612,11 +681,117 @@ errout:
 		1. add(0);
 		2. free(0);free(0)
 		3. add(0, target_addr);add(0, target_addr);add(0, any_value);
+### tcache dup
+	类似 fastbin dup，不过利用的是 tcache_put() 的不严谨.
+```
+static __always_inline void
+tcache_put (mchunkptr chunk, size_t tc_idx)
+{
+  tcache_entry *e = (tcache_entry *) chunk2mem (chunk);
+  assert (tc_idx < TCACHE_MAX_BINS);
+  e->next = tcache->entries[tc_idx];
+  tcache->entries[tc_idx] = e;
+  ++(tcache->counts[tc_idx]);
+}
+```
+	可以看出，tcache_put() 的检查也可以忽略不计（甚至没有对 tcache->counts[tc_idx] 的检查），大幅提高性能的同时安全性也下降了很多。
+	因为没有任何检查，所以我们可以对同一个 chunk 多次 free(double free)，造成 cycliced list。
+#### tcache check
+	2.29后加入Tcache 的 double free 的 check。
+##### 主要的修改
+	tcache的tcache_entry增加 struct tcache_perthread_struct *key域 检测double free.
+```
+tcache_put{
+...
++	e->key = tcache;
+...
+}
+
+tcache_get{
+...
++	e->key = NULL;
+...
+}
+
+_int_free{
+...
++    /* Check to see if it's already in the tcache.  */
++    tcache_entry *e = (tcache_entry *) chunk2mem (p); // next=fd, key=bk.
++
++    /* This test succeeds on double free.  However, we don't 100%
++       trust it (it also matches random payload data at a 1 in
++       2^<size_t> chance), so verify it's not an unlikely coincidence
++       before aborting.  */
++    if (__glibc_unlikely (e->key == tcache && tcache))
++      {
++       tcache_entry *tmp;
++       LIBC_PROBE (memory_tcache_double_free, 2, e, tc_idx);
++       for (tmp = tcache->entries[tc_idx];
++            tmp;
++            tmp = tmp->next)
++         if (tmp == e)
++           malloc_printerr ("free(): double free detected in tcache 2");
++       /* If we get here, it was a coincidence.  We've wasted a few
++          cycles, but don't abort.  */
++      }
++
+...
+}
+```
+##### bypass 思路
+	新增保护主要还是用到e->key这个属性，因此绕过想绕过检测进行double free，这里也是入手点。绕过思路有以下两个：
+	1. 	如果有UAF漏洞或堆溢出，可以修改e->key为空，或者其他非tcache_perthread_struct的地址。这样可以直接绕过_int_free里面第一个if判断。不过如果UAF或堆溢出能直接修改chunk的fd的话，根本就不需要用到double free了。
+	2. 	利用堆溢出，修改chunk的size，最差的情况至少要做到off by null。留意到_int_free里面判断当前chunk是否已存在tcache的地方，它是根据chunk的大小去查指定的tcache链，由于我们修改了chunk的size，查找tcache链时并不会找到该chunk，满足free的条件。虽然double free的chunk不在同一个tcache链中，不过不影响我们使用tcache poisoning进行攻击。
+	3. 	绕过tcache double free ，使用 fastbin double free.
+
+### tcache perthread corruption
+	tcache_perthread_struct 是整个 tcache 的管理结构，如果能控制这个结构体，那么无论我们 malloc 的 size 是多少，地址都是可控的。
+```
+tcache_    +------------+<---------------------------+
+\perthread |......      |                            |
+\_struct   +------------+                            |
+           |counts[i]   |                            |
+           +------------+                            |
+           |......      |          +----------+      |
+           +------------+          |header    |      |
+           |entries[i]  |--------->+----------+      |
+           +------------+          |target    |------+
+           |......      |          +----------+
+           |            |          |          |
+           +------------+          +----------+
+```
+	两次 malloc 后我们就返回了 tcache_prethread_struct 的地址，就可以控制整个 tcache 了。
+	因为 tcache_prethread_struct 也在堆上，因此这种方法一般只需要 partial overwrite 就可以达到目的。
+
+### tcache house of spirit
+	在栈上伪造一个chunk，然后把它给free进tcache中，再malloc，就可以控制栈上的空间。
+
+### smallbin unlink
+	在 smallbin 中包含有空闲块的时候，会同时将同大小的其他空闲块，放入 tcache 中，此时也会出现解链操作，但相比于 unlink 宏，缺少了链完整性校验( __glibc_unlikely (bck->fd != victim) )。因此，原本 unlink 操作在该条件下也可以使用。
+#### tcache stashing unlink attack
+这种攻击利用的是 tcache bin 有剩余 (数量小于 `TCACHE_MAX_BINS` ) 时，同大小的 small bin 会放进 tcache 中 (这种情况可以用 `calloc` 分配同大小堆块触发，因为 calloc 分配堆块时不从 tcache bin 中选取)。在获取到一个 `smallbin` 中的一个 chunk 后, 如果 tcache 仍有足够空闲位置，会从smallbin的最后一个元素开始将剩余的 small bin 链入 tcache ，在这个过程中只对第一个 bin 进行了完整性检查( __glibc_unlikely (bck->fd != victim) )，后面的堆块的检查缺失。当攻击者可以写一个 small bin 的 bk 指针时，其可以在任意地址上写一个 libc 地址 (类似 `unsorted bin attack` 的效果)，另外可以分配任意地址。 构造得当的情况下，tcache插入处于任意地址的fake_chunk, tcache分配未检查size。
+##### exploitation
+###### 前提
+	1. 对应大小的tcachebin可继续插入。
+	2. smallbin不为空（count可能需要>=2）。
+	3. 使用calloc触发攻击。
+###### implementation
+	smallbin fd: chunk0->chunk1->bin
+	smallbin bk: chunk1->chunk0->target_addr->0x0
+	tcachebin: chunk2->chunk3->0x0
+    -------calloc-------->>>>>>
+	tcachebin: target_addr->chunk0->chunk1->chunk2->chunk3->0x0
+	其中，target_addr(fake chunk) 的fd = bin.
+	-------malloc-------->>>>>>>
+	控制target_addr.
+	任意地址写固定值（smallbin的地址）
 ### reference
 - https://www.freebuf.com/articles/system/234219.html : 解释性文章。
+- http://q1iq.top/GeekPwn%E7%83%AD%E8%BA%AB%E8%B5%9B2020-wp/ ： 题
+
 ## fake chunk
 - hook-19附近有一个size为0x7f的fakechunk.
-- io附近有个0x7f的fakechunk.
+- io附近有个0x7f的fakechunk, _IO_2_1_stderr_+160 该处错位能构造。
 - 没开pie的got附近有个0x40/0x60的fakechunk.
 - bss段构建fakechunk.
 
@@ -674,4 +849,34 @@ errout:
 - 2.26加入tcache
 - 2.29增加tcache限制，几乎不能offbynull,也不能unsortedbin attack
 - 2.31修了largebin attack.
+
+### TLS段
+	通常会有一些有用的东西会放在 .tls 段， 像是主分配区（main_arena） 的地址， canary （栈保护值） ，还有一个奇怪的栈地址（stack address），它指向栈上的某个地方，每次运行可能不一样，但它具有固定的偏移量。
+	默认情况下，当 malloc 或者 new 操作一次性分配大于等于 128KB 的内存时，会使用 mmap 来进行，而在小于 128KB 时，使用的是 brk 的方式。
+	使用 malloc 的 mmap方式来分配内存m, 这些页面将放在 .tls 段之前的地址，与.tls段紧挨。
+
+### 使用printf触发malloc和free.
+```
+#define EXTSIZ 32
+enum { WORK_BUFFER_SIZE = 1000 };
+
+if (width >= WORK_BUFFER_SIZE - EXTSIZ)
+{
+    /* We have to use a special buffer.  */
+    size_t needed = ((size_t) width + EXTSIZ) * sizeof (CHAR_T);
+    if (__libc_use_alloca (needed))
+        workend = (CHAR_T *) alloca (needed) + width + EXTSIZ;
+    else
+    {
+        workstart = (CHAR_T *) malloc (needed);
+        if (workstart == NULL)
+        {
+            done = -1;
+            goto all_done;
+        }
+        workend = workstart + width + EXTSIZ;
+    }
+}
+```
+	大多数时候，触发 malloc 和 free 的最小 width 是 65537。
 ---

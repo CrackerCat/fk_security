@@ -22,6 +22,7 @@
 * jg=ja 前大于后
 * jge 前大于等于后
 * jnb 前不低于后
+* js 为负则跳转
 * jl(jmp less)=jnge : 小于则转移，用于有符号数的条件转移
 * cmp src des: 比较整数，des-src,修改标志位，不修改任何操作数。cmp 算术减法运算结果为零,就把ZF(零标志)置1.
 * test arg1 arg2 : 执行bit间的逻辑and运算，z并设置标志寄存器，结果本身不会保存。test逻辑与运算结果为零,就把ZF(零标志)置1; 
@@ -38,6 +39,7 @@
 * shr : 同理,逻辑右移
 * sar : 算数右移, 保留操作数的符号，即用符号位来补足，而SHR右移时总是用0来补足.
 * loop : loop指令会使每循环一次，cx就对自身值减1操作，直到等于0为止，在此之前，一直重复执行标识符到loop间的代码. a. (cx)=(cx)-1； b. 判断cx中的值不为零则转至标号处执行程序如果为零则向下执行。
+* offset : 伪指令，在编译的过程中，编译器会将该伪指令进行计算，并且替换成标号/变量的地址偏移量。
 
 ### 几个术语
 * 字节：8位，后缀：b
@@ -74,10 +76,17 @@ return 0; =  leave ; retn
 
 ---
 ## data type  
+### x86_64
 * dq 四字单元  
 * db 字节单元  
 * dw 单字单元  
-* dd 双字单元  
+* dd 双字单元
+### arm
+* dcb 一个字节
+* dcw 单字
+* dcd 两字
+* dcq 四字
+  
 数据访问方式:immediate, register, memory.  
 
 ---
@@ -149,4 +158,20 @@ struct S2 d[4];
 - move $RD, $RS : $RD=$RS
 - li $RD, $num : $RD=$num
 
+# arm assembly language
+## base
+### architecture
+- armel : 32bit, 传参数用普通寄存器
+- armhf : 32bit, 传参数用的是fpu的寄存器，因此armhf的浮点运算性能更高。
+- arm64 : 64bit, 
 
+# ppc assembly language
+## base
+### architecute
+- ppc64el : power系统，64bit, 小端
+
+# s390x assembly language
+## base
+### architecture
+- s390x : 64bit IBM/S 390 
+ 

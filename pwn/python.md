@@ -5,7 +5,10 @@
 * hex(num) 将一个整数转换为一个十六进制字符串
 
 ## str  
-str[begin:end]   str[(-begin):(-end)]  output str   元素不可修改.  
+	str[begin:end]   str[(-begin):(-end)]  output str   元素不可修改.
+
+	''' 
+    '''支持换行的字符串。   
 
 ## list  
 - list: ls = [1,2,4] ls[:] output list  ls[index]; output 元素。  

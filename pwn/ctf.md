@@ -1,8 +1,8 @@
 ## py  
 - p.interactive() 接下来自动交互。  
 - context.arch = ''; flat([]); // no p32 p64 + for payload.  
-- send() 
-- sendline() 发送msg,并进行换行(末尾\n,多一个字节)
+- send() 用于对抗 read()。
+- sendline() 发送msg,并进行换行(末尾\n,多一个字节) 用于对抗scanf()。
 - sendlineafter() =  recvuntil() + sendline()  
 - sendafter()
 - recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
@@ -19,6 +19,11 @@
 - 随机数（伪随机数)利用： seed不变,随机数序列不变。    
 - dll = ctypes.cdll.LoadLibrary() 引用动态库。  
 
+## IDA
+- LOBYTE() 取最低的一字节。
+- HIBYTE() 取最高的一字节。
+- 同理有LOWORD(), HIWORD()。
+
 ---
 ## checksec
 	* NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
@@ -30,6 +35,20 @@
  		* partial(默认) got表可写，考虑劫持got表
  		* fulled    load time的时候全部函数地址已经解析完成，不可写
 	* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space
+
+## ncat
+	让程序运行在指定端口上。
+	一般情况如下：
+		ncat -vc ./binary -kl 127.0.0.1 $port
+	下面两种方式指定运行时的库：
+		* ncat -vc 'LD_PRELOAD=/path/to/libc.so ./binary' -kl 127.0.0.1 $port
+		* ncat -vc 'LD_LIBRARY_PATH=/path/of/libc.so ./binary' -kl 127.0.0.1 $port
+	然后你就可以使用 nc 连接到 binary 所运行的端口和它进行交互： nc localhost $port。
+
+## seccomp
+	沙箱保护，只有在白名单中的系统调用可以使用。
+### 绕过
+	orw -> open read write.
 
 ## /bin/sh的偏移查找           
 - strings -t x 可以查看在文件中字符串的0x偏移量  
@@ -142,7 +161,7 @@ for x,constraint in generate_one_gadget_full(LIBC):
 ### 绕过constraint
 	通过调试，查看调用one-gadget时的寄存器以及堆栈信息。
 ### one-gadget+malloc_hook+realloc_hook
-	一般用realloc_hook平衡栈帧，满足例如rsp+0x30地址的值为0. 通过调试，选取第几条指令。
+	一般用realloc_hook平衡栈帧，调用malloc或者realloc时满足例如rsp+0x30地址的值为0. 
 	realloc_hook和malloc_hook相邻，且存在于libc可写段。
 ```disassembly
 push r15
@@ -247,10 +266,25 @@ obj.dump("__libc_start_main_ret")
 - objdump -d binary 反汇编二进制  
 - execve获取shell，参数得满足一些条件
  - argv和envp的数组得以0x0结尾
+- execveat(dirfd, pathname, argv[], envp[], flags)
+   execve ，由于缺少 gadget 或其他限制，执行起来总是很艰难的时候：
+   让 pathname 指向 "/bin/sh"， 并将 argv, envp 和 flags 设置为 0， 那么无论 dirfd 的值是多少，我们仍然可以得到一个 shell。
 - libc版本猜测
+	出题起docker一般都是最新小版本的libc,除非出题人恶心你。
 	- double free
-		若报错则不是2.27版本的libc。通过泄露libc地址，比对后12位地址判断版本。
-
+		若free(0),free(0)爆fastbin attack错误, 则是2.23版本的libc。通过泄露libc地址，比对后12位地址判断版本。若未报错，大概率是2.27版本的libc。
+	- strings elf|grep GCC
+		会显示ubuntu版本号，仅供参考。
+		- 16.04 2.23  目前最新11.2
+		- 18.04 2.27
+		- 19.04 2.29
+		- 19.10 2.30
+		- 20.04 2.31
+- 栈地址泄露
+	libc中有一个叫 environ 的 symbol ，他的值与 main 函数的第三个参数 char ** envp 相同, 就是栈上地址。
+	gdb: 使用p/x &environ 或 libc_elf.symbols['environ'] 获取地址。
+### refrence
+- https://www.cnblogs.com/crybaby/p/13294562.html#%E6%B3%84%E9%9C%B2%E6%A0%88%E5%9C%B0%E5%9D%80 : tips
 ## model
 ```python
 from pwn import * 

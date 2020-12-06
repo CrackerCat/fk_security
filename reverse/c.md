@@ -51,8 +51,11 @@
 ### mprotect()
   修改一段指定内存区域的保护属性。
 
-### prctrl
+### prctrl()
   对进程进行操作。
+
+### glob()
+  搜索所有匹配pattern的文件名，使用的是堆块保存文件名，globfree释放后可能保存着libc的信息。
 
 ### signal
 #### signal()

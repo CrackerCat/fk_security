@@ -2,7 +2,7 @@
   进程中的FILE结构会通过_chain域彼此连接形成一个链表，链表头部用全局变量_IO_list_all表示，通过这个值我们可以遍历所有的FILE结构。
   在标准I/O库中，每个程序启动时有三个文件流是自动打开的：stdin、stdout、stderr。因此在初始状态下，_IO_list_all指向了一个有这些文件流构成的链表，但是需要注意的是这三个文件流位于libc.so的数据段。而我们使用fopen创建的文件流是分配在堆内存上的。
   typedef struct _IO_FILE FILE;
-  _IO_FILE结构外包裹着另一种结构_IO_FILE_plus，其中包含了一个重要的指针vtable指向了一系列函数指针,需要注意参数。在libc2.23版本下，32位的vtable偏移为0x94，64位偏移为0x228。
+  _IO_FILE结构外包裹着另一种结构_IO_FILE_plus，其中包含了一个重要的指针vtable指向了一系列函数指针,需要注意参数。在libc2.23版本下，32位的vtable偏移为0x94，64位偏移为0xd8。
 ```c
 struct _IO_FILE {
   int _flags;       /* High-order word is _IO_MAGIC; rest is flags. */
@@ -34,14 +34,34 @@ struct _IO_FILE_plus
     _IO_FILE    file;
     IO_jump_t   *vtable;
 }
+
+extern struct _IO_FILE_plus _IO_2_1_stdin_;
+extern struct _IO_FILE_plus _IO_2_1_stdout_;
+extern struct _IO_FILE_plus _IO_2_1_stderr_; 
+#define _IO_stdin ((_IO_FILE*)(&_IO_2_1_stdin_))
+#define _IO_stdout ((_IO_FILE*)(&_IO_2_1_stdout_))
+#define _IO_stderr ((_IO_FILE*)(&_IO_2_1_stderr_))
+
+int
+putchar (int c)
+{
+  int result;
+  _IO_acquire_lock (_IO_stdout);
+  result = _IO_putc_unlocked (c, _IO_stdout);
+  _IO_release_lock (_IO_stdout);
+  return result;
+}
 ```
+   由上述代码可知，_IO_stdin/out/err 空间存储着_IO_2_1_stdin_/out_/err_的地址，因此我们可以伪造FILE结构体覆盖它。 相关io函数都是用的_IO_stdout/in/err.
+   用gdb打印出_chain的偏移的方法： p &((struct _IO_FILE*)0)->_chain
 ```c
+//每个元素都是IO_jump_t类型，其实是一个hook。
 void * funcs[] = {
    1 NULL, // "extra word"
    2 NULL, // DUMMY
-   3 exit, // finish
-   4 NULL, // overflow
-   5 NULL, // underflow
+   3 exit, // finish, _IO_finish_t
+   4 NULL, // overflow, _IO_overflow_t
+   5 NULL, // underflow, 
    6 NULL, // uflow
    7 NULL, // pbackfail
    8 NULL, // xsputn  #printf
@@ -75,6 +95,7 @@ void * funcs[] = {
 - 初始化分配的FILE结构
 - 将初始化的FILE结构链入FILE结构链表中
 - 调用系统调用打开文件
+
 ## fclose
   fclose首先会调用_IO_unlink_it将指定的FILE从_chain链表中脱链。
   之后会调用_IO_file_close_it函数，_IO_file_close_it会调用系统接口close关闭文件。
@@ -92,11 +113,93 @@ void * funcs[] = {
 # FSOP(File Stream Oriented Programming)
   根据前面对FILE的介绍得知进程内所有的_IO_FILE结构会使用_chain域相互连接形成一个链表，这个链表的头部由_IO_list_all维护。
   FSOP的核心思想就是劫持_IO_list_all的值来伪造链表和其中的_IO_FILE项，但是单纯的伪造只是构造了数据还需要某种方法进行触发。FSOP选择的触发方法是调用_IO_flush_all_lockp，这个函数会刷新_IO_list_all链表中所有项的文件流，相当于对每个FILE调用fflush，也对应着会调用_IO_FILE_plus.vtable中的_IO_overflow。
+
   _IO_flush_all_lockp不需要攻击者手动调用，在一些情况下这个函数会被系统调用：
 - 当libc执行abort流程时
+	- 当 glibc 检测到内存错误时，会依次调用这样的函数路径：malloc_printerr ->libc_message->__GI_abort -> _IO_flush_all_lockp -> _IO_OVERFLOW
 - 当执行exit函数时
+	- 执行exit()时，系统会调用_IO_flush_all_lockp
 - 当执行流从main函数返回时
 
+## _IO_flush_all_lockp中的_IO_overflow的触发约束
+  要让正常控制执行流，还需要伪造一些数据，我们看下代码:
+```
+if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)   
+#if defined _LIBC || defined _GLIBCPP_USE_WCHAR_T
+       || (_IO_vtable_offset (fp) == 0
+           && fp->_mode > 0 && (fp->_wide_data->_IO_write_ptr
+                    > fp->_wide_data->_IO_write_base))
+#endif
+       )
+      && _IO_OVERFLOW (fp, EOF) == EOF)
+```
+- fp->mode <=0
+- fp->_IO_write_ptr > fp->_IO_write_base 
+
 # 新版本libc下IO_FILE的利用
-  在最新版本的glibc中(2.24)，全新加入了针对IO_FILE_plus的vtable劫持的检测措施，glibc 会在调用虚函数之前首先检查vtable地址的合法性。
   在_IO_FILE中_IO_buf_base表示操作的起始地址，_IO_buf_end表示结束地址，通过控制这两个数据可以实现控制读写的操作。经测试，_IO_2_1_stdin+56的内存空间内容=全局缓冲区buf的地址。
+## libc2.23
+  在目前 libc2.23 版本下，位于 libc 数据段的 vtable 是不可以进行写入的。不过，通过在可控的内存中伪造 vtable 的方法依然可以实现利用。
+## libc2.24
+  在最新版本的glibc中(2.24)，全新加入了针对IO_FILE_plus的vtable劫持的检测措施，glibc 会在调用虚函数之前首先检查vtable地址的合法性。
+```
+IO_validate_vtable (const struct _IO_jump_t *vtable)
+{
+  /* Fast path: The vtable pointer is within the __libc_IO_vtables
+     section.  */
+  uintptr_t section_length = __stop___libc_IO_vtables - __start___libc_IO_vtables;
+  const char *ptr = (const char *) vtable;
+  uintptr_t offset = ptr - __start___libc_IO_vtables;
+  if (__glibc_unlikely (offset >= section_length))
+    /* The vtable pointer is not in the expected section.  Use the
+       slow path, which will terminate the process if necessary.  */
+    _IO_vtable_check ();
+  return vtable;
+}
+
+```
+  新版本（libc2.24以上）的防御机制会检查vtable的合法性，不能再像之前那样改vatable为堆地址，但是_IO_str_jumps是一个符合条件的 vtable，改 vtable为 _IO_str_jumps即可绕过检查。
+
+```
+#define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
+const struct _IO_jump_t _IO_str_jumps libio_vtable =
+{
+  
+  JUMP_INIT_DUMMY,
+  JUMP_INIT(finish, _IO_str_finish),
+  JUMP_INIT(overflow, _IO_str_overflow),
+  JUMP_INIT(underflow, _IO_str_underflow),
+  JUMP_INIT(uflow, _IO_default_uflow),
+  JUMP_INIT(pbackfail, _IO_str_pbackfail),
+  JUMP_INIT(xsputn, _IO_default_xsputn),
+  JUMP_INIT(xsgetn, _IO_default_xsgetn),
+  JUMP_INIT(seekoff, _IO_str_seekoff),
+  JUMP_INIT(seekpos, _IO_default_seekpos),
+  JUMP_INIT(setbuf, _IO_default_setbuf),
+  JUMP_INIT(sync, _IO_default_sync),
+  JUMP_INIT(doallocate, _IO_default_doallocate),
+  JUMP_INIT(read, _IO_default_read),
+  JUMP_INIT(write, _IO_default_write),
+  JUMP_INIT(seek, _IO_default_seek),
+  JUMP_INIT(close, _IO_default_close),
+  JUMP_INIT(stat, _IO_default_stat),
+  JUMP_INIT(showmanyc, _IO_default_showmanyc),
+  JUMP_INIT(imbue, _IO_default_imbue)
+};
+  
+```
+### 利用思路
+   * 方法一
+   IO_str_overflow 函数会调用 FILE+0xe0处的地址。这时只要我们将虚表覆盖为 IO_str_jumps将偏移0xe0处设置为one_gadget即可。
+   * 方法二
+   还有一种就是利用io_finish函数，同上面的类似， io_finish会以 IO_buf_base处的值为参数跳转至 FILE+0xe8处的地址。执行 fclose（ fp）时会调用此函数，但是大多数情况下可能不会有 fclose（fp），这时我们还是可以利用异常来调用 io_finish，异常时调用 IO_OVERFLOW是根据IO_str_overflow在虚表中的偏移找到的， 我们可以设置vtable为IO_str_jumps-0x8异常时会调用io_finish函数。
+
+# other
+## exit函数()分析
+### 利用思路一
+	exit() -> _dl_fini() -> _dl_rtld_unlock_recursive和 _dl_rtld_lock_recursive两个函数。
+    这_dl_rtld_unlock_recursive和 _dl_rtld_lock_recursive两个函数是_rtld_global结构体变量中的函数指针。
+    _rtld_global结构位于ld.so中，所以需要先计算ld_base。 在Libc-2.27中，libc_base+0x3f1000=ld_base。
+    似乎只有dl_rtld_unlock_recursive 才有合适的one_gadget。
+### 利用思路二
+	exit_hook.

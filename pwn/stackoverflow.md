@@ -1,10 +1,17 @@
 # ROP:  
 	当开启了NX时，可考虑ROP.
 	填充空间方法： 1> ida ; 2> gdb.  canary found是，触发check_failed(),ROP失效。  
+
 ## 前提条件
 	1. 首先必须要有一个buffer overflow的漏洞（当然这个前提基本上所有攻击都必须得有）；
 	2. 攻击者需要事先决定好完成攻击过程的所有gadgets。对于上面提到的赋值操作，总共只需要3个gadgets，每个gadget最长两条指令，但是如果需要进行一些复杂的操作，就有可能需要有很多gadgets；除了gadgets的数量多之外，单个gadget的指令数也需要考虑；
 	3. 攻击者需要在被攻击程序所在的进程地址空间中找到所有的这些gadgets的首地址，并且将其填在栈的合适位置上。
+
+## 危险函数
+	1. scanf("%40s", buf) ： 从标准输入获取 40 个字节的数据，并将 NULL 放在输入数据的结尾
+	2. fgets(buf, 40, stdin) ： 标准输入获取 39 个字节的数据，并将 NULL 放在输入数据的结尾
+	3. read(stdin, buf, 40) ： 从标准输入获取 40 个字节的数据，但是不会把 NULL 放在输入数据的结尾
+
 ## 栈溢出利用：  
 	32bit普通函数传参: ebp + 8h 第一个参数； ebp + 0ch 第二个参数 以此类推 ebp的位置是固定的  
 	64bit普通函数传参: 参数和局部变量先存寄存器(rdi,rsi,rdx,rcx,r8,r9)(前六个参数)再存stack space(右边的存栈中)
@@ -28,6 +35,7 @@
 ![](image/Signal_Frame.jpg "signal_frame")
 这段内存称为一个`Signal Frame`。在内核`sigreturn`系统调用处理函数中，会根据当前的栈指针指向的`Signal Frame`对进程上下文进行恢复，并返回用户态，从挂起点恢复执行。
 #### Signal机制缺陷利用
+	当无csu时，可以考虑这类攻击方式。
 	内核替用户进程将其上下文保存在`Signal Frame`中，然后，内核利用这个`Signal Frame`恢复用户进程的上下文，done！那么，问题来了： 
 	1. 这个`Signal Frame`是被保存在用户进程的地址空间中的，是用户进程可读写的；
 	2. 内核并没有将保存的过程和恢复的过程进行一个比较，也就是说，在`sigreturn`这个系统调用的处理函数中，内核并没有判断当前的这个`Signal Frame`就是之前内核为用户进程保存的那个`Signal Frame`。
@@ -39,7 +47,7 @@
 	第三，需要知道`syscall`指令在内存中的地址；
 	第四，需要知道`sigreturn`系统调用的内存地址。
 从上可知，我们只需要知道两个`gadget`的地址。
-注意: cs/gs/fs不要修改它的值,可以是0x2b000000000033。
+注意: cs/gs/fs不要修改它的值,可以是0x2b000000000033, 未用到的位置全置0，比如说cs/gs/fs后面的空间(用于构建调用链)。
 ##### 利用SROP构造系统调用串（System call chains）
 	只需要再额外添加一个对栈指针`rsp`的控制就行了。
 ![](image/system_call_chain.jpg "system_call_chain")
@@ -52,7 +60,23 @@
 		如果我们将`sigreturn`当做一个系统调用来看待的话，那么其实这个单独的gadget并不是必须的。因为我们可以将`rax`寄存器设置成`15`（sigreturn的系统调用号），然后调用一个`syscall`，效果和调用一个`sigreturn`是一样一样的。那么，问题就从“如何找到一个`sigreturn` gadget”变成了“如何控制寄存器`rax`的值”。而`rax`这个寄存器非常特殊，它除了被用来指定系统调用的调用号之外，也是函数返回值最后存放的地方。因此，我们可以利用控制函数返回值来控制`rax`寄存器的值。
 	* gadget syscall;ret指令
 ![](image/syscall_ret_in_memory.jpg "syscall_ret_in_momory")
-
+##### pwntools中的SigreturnFrame库。
+	在构建栈帧过程中，建议使用pwntools，可以避免一些莫名其妙的错误。
+```python
+def rt_sigreturn_stack_frame(rt_sigreturn, rax, rdi, rsi, rdx, rbp, rsp, rip):
+	payload = p6(rt_sigreturn)
+	sig = SigreturnFrame()
+	sig.rax = rax
+	sig.rdi = rdi
+	sig.rsi = rsi
+	sig.rdx = rdx
+	sig.rbp = rbp
+	sig.rsp = rsp
+	sig.rip = rip
+	sig.r15 = 0x00000067616c662f # flag字符串
+	payload += byte2str(bytes(sig))
+	return payload #0x100
+```
 		
 #### reference
 - https://www.freebuf.com/articles/network/87447.html : SROP解释性资料

@@ -17,13 +17,15 @@
 
 ### primitive root 本原根
 	素数p的原根定义：如果a是素数p的原根，则数a mod p, a^2 mod p, … , a^(p-1) mod p 是不同的并且包含1到p-1的整数的某种排列。
+	假设一个数g对于P来说是原根，那么g^i mod P的结果两两不同,且有 1<g<P, 1<i<P,那么g可以称为是P的一个原根.
+	简单来说，g^i mod p ≠ g^j mod p （p为素数）,其中i≠j且i, j介於1至(p-1)之间,则g为p的原根。
 
 ### gcd
 	gcd(a,b) = gcd(a,-b) = gcd(-a,b) = gcd(-a,-b)=max[k, such that k | a and k | b]	
 
 ### 扩展欧几里得算法（Extended Euclid Algorithm）
-	给予二整数 a 与 b, 必存在有整数 x 与 y 使得ax + by = gcd(a,b)。
-	a存在模b的乘法逆元的充要条件是gcd（a,b）= 1。
+	给予二整数 a 与 b, 必存在有整数 x 与 y 使得ax + by = gcd(a,b)=gcd(b, a/b)。
+	a存在模b的乘法逆元的充要条件是gcd（a,b）= 1 -> ax mod b = 1。
 #### 求乘法逆元
 ```pseudocode
 EXTENDED_EUCLID(m, b)
@@ -89,6 +91,21 @@ public:
 
 （5）多次取不同的 a 进行 Miller-Rabin 素数测试，这样可以使正确性更高。
 
+### LFSR(线性反馈移位寄存器）
+	LFSR通常是移位寄存器，其输入位由总移位寄存器值中某些位的XOR驱动。
+	其输入位是先前状态的线性函数，单个位最常用的线性函数是异或。
+	LFSR的初始值称为种子，寄存器产生的值流完全由其当前（或先前）状态决定，由于寄存器具有有限数量的可能状态，因此它最终必须进入重复周期。
+```math
+| ++ bit0 ++ bit1 ++ bit2 ++ bit3 ++|
+|     |                |      |     |
+|     |               <<-(x1) |     |
+|     | <---func(x1,x2)   <<-(x2)-  |
+|+++++++++++++++++++++++++++++++++++|
+一次变换后就是 bit2^bit3 bit0 bit1 bit2,。多次变化后，会回到最初的值，周期性变换。
+```
+#### concept
+- taps : 抽头，在LFSR中影响下一个状态的bit位的位置叫做抽头。
+
 ---
 ## convention cipher
 ### OTP(one-time pad)
@@ -126,7 +143,10 @@ public:
 ### Vernam cipher
 	Vernam密码是一种对称的流密码，其中，明文与相同长度的随机或伪随机数据流（“密钥流”）组合在一起，以使用布尔值 “ exclusive or”（ XOR）功能。
 
-## MAC
+## hash
+### birthday attack
+	m位的hash值，至少经过2^(m/2)次碰撞才会冲突。
+### MAC
 	带密钥的hash函数。
 ---
 ## application of cryptography
@@ -138,4 +158,7 @@ public:
 
 ### 非对称密码和对称密码的差异
 	1. 对称密码适合对大数据进行加密，效率高，通常采用非对称加密对秘钥加密。
+
+### replay attack
+	重放攻击(Replay Attacks)又称重播攻击、回放攻击，是指攻击者发送一个目的主机已接收过的包，来达到欺骗系统的目的，主要用于身份认证过程，破坏认证的正确性。
 ---
