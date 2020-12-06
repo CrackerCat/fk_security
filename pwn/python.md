@@ -27,7 +27,7 @@ set: {,,,,,,}, 无下标索引, 无相同元素。
 
 python变量内存：值相同的变量地址相同(常量)  
 
-mkey:value,,,,,} key 唯一。  = dict(key=value,,,)  
+map={key:value,,,,,} key 唯一。  = dict(key=value,,,)  
 
 格式化变量(sprintf): s='%s %d' %(str,integer)  
 
