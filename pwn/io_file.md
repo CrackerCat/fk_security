@@ -140,6 +140,7 @@ if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)
   在_IO_FILE中_IO_buf_base表示操作的起始地址，_IO_buf_end表示结束地址，通过控制这两个数据可以实现控制读写的操作。经测试，_IO_2_1_stdin+56的内存空间内容=全局缓冲区buf的地址。
 ## libc2.23
   在目前 libc2.23 版本下，位于 libc 数据段的 vtable 是不可以进行写入的。不过，通过在可控的内存中伪造 vtable 的方法依然可以实现利用。
+    
 ## libc2.24
   在最新版本的glibc中(2.24)，全新加入了针对IO_FILE_plus的vtable劫持的检测措施，glibc 会在调用虚函数之前首先检查vtable地址的合法性。
 ```
@@ -196,10 +197,51 @@ const struct _IO_jump_t _IO_str_jumps libio_vtable =
 
 # other
 ## exit函数()分析
-### 利用思路一
+### 利用思路一 - rtld
 	exit() -> _dl_fini() -> _dl_rtld_unlock_recursive和 _dl_rtld_lock_recursive两个函数。
     这_dl_rtld_unlock_recursive和 _dl_rtld_lock_recursive两个函数是_rtld_global结构体变量中的函数指针。
     _rtld_global结构位于ld.so中，所以需要先计算ld_base。 在Libc-2.27中，libc_base+0x3f1000=ld_base。
     似乎只有dl_rtld_unlock_recursive 才有合适的one_gadget。
-### 利用思路二
+### 利用思路二 - exit_hook 
 	exit_hook.
+### 利用思路三 - __exit_funcs
+  exit调用过程： exit() -> __run_exit_handlers()
+```
+struct exit_function_list
+{
+	struct exit_function_list *next;
+	size_t idx;
+	struct exit_function fns[32];
+}；
+
+extern struct exit_function_list *__exit_funcs attribute_hidden;
+extern struct exit_function_list *__quick_exit_funcs attribute_hidden;
+
+struct exit_function结构体 存储着函数指针。
+
+
+
+exit (int status)
+{
+    __run_exit_handlers (status, &__exit_funcs, true, true);
+}
+
+__run_exit_handlers(int status, struct exit_function_list **listp,
+					bool run_list_atexit, bool run_dtors)
+{
+......
+    while (*listp != NULL)
+    {
+        struct exit_function_list *cur = *listp;
+		while (cur->idx > 0)	
+		{
+			//根据idx执行相应的 exit_function类型 的函数
+		}
+    }
+......
+}
+```
+
+由上述代码可知：
+	\__exit_funcs是一个 exit_function_list * 类型的全局变量。因此，若我们能够用自定义的空间地址覆盖libc中的 \__exit_funcs 指针变量，就可以让 __run_exit_handlers 函数使用我们伪造的exit_function_list，从而执行任意代码。
+	

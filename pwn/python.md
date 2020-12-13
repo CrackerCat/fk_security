@@ -9,6 +9,7 @@
 
 	''' 
     '''支持换行的字符串。   
+	格式化变量(sprintf): s='%s %d' %(str,integer) 
 
 ## list  
 - list: ls = [1,2,4] ls[:] output list  ls[index]; output 元素。  
@@ -20,17 +21,17 @@
 - index(ele) : 查找元素
 
 ## tuple  
-tuple: 元素不可修改  (,,,,,)  
+	tuple: 元素不可修改  (,,,,,)  
 
 ## set  
-set: {,,,,,,}, 无下标索引, 无相同元素。  
+	set: {,,,,,,}, 无下标索引, 无相同元素。  
 
-python变量内存：值相同的变量地址相同(常量)  
+	python变量内存：值相同的变量地址相同(常量)  
 
-map={key:value,,,,,} key 唯一。  = dict(key=value,,,)  
+## dict
+	map={key:value,,,,,} key 唯一。  = dict(key=value,,,)  
 
-格式化变量(sprintf): s='%s %d' %(str,integer)  
-
+ 
 x**y x的y乘方  
 
 逻辑运算符： and  or not  

@@ -198,8 +198,40 @@
 - https://www.usenix.org/conference/usenixsecurity19/presentation/zhang-tong : 会议链接(含pdf,slide,video)
 - https://www.cnblogs.com/chengzhenghua/p/13227113.html : 解释性文章
 - k-miner
+
 -----------------------------------------------------------------------------------------------------
 --
+
+### Detecting Missing-Check Bugs via Semantic- and Context-Aware
+#### 6 evaluation
+##### 6.4 False Positives
+	1. 不精确的指向分析
+		采用anderson或者Steensgaard 指针分析去降低误报率。
+		这个有待考量？需要解决跨函数，域敏感，控制流/上下文敏感的问题
+	2. 无关紧要的检查
+		有些检查是冗余的，例如调试代码，驱动关闭函数，资源清理函数等，都被系统保证正确性。
+		linux维护者不情愿修复这些场景，因此我们利用基于模式匹配的方法查找资源释放路径，从而过滤掉这些误报。[S. Saha, J.-P. Lozi, G. Thomas, J. L. Lawall, and G. Muller. Hector: Detecting resource-release omission faults in error-handling code for systems software.]
+	3. 隐式的检查
+		使用check函数进行隐式的检查。
+		维护一个checker函数的列表解决这个问题？
+	4. 程序越小，误报率越高，因为对等切片少。
+##### 6.5 False Negatives
+	类型逃逸分析消除漏报率。
+	多层类型分析增加对struct，array, global variable, and vector等类型的支持。
+	漏报率的分析
+	1. 收集近期linux kernel 因缺失安全检查导致的bug， 分析输出结果是否包含这些bug。
+	2. 绘制RF与漏报率的二维图。
+#### 7 discussion
+##### 7.1 确定 ms bug 的可利用性和安全影响
+	利用符号执行验证 ms bug.
+	利用危险变量的使用确定潜在安全影响。
+	总而言之，自动化确定ubg可利用性和安全影响是一个研究难题。 ms 场景的可利用性和安全影响 可以解决误报问题。
+	 
+#### reference
+- https://www.youtube.com/watch?v=0pDNH-1pvzc : 视频
+
+-------------------------------------------------------------------------------------------------------
+
 ## authentication and authorisation
 	验证： something you know/hava/are.
 ## other

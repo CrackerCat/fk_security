@@ -1,12 +1,19 @@
 # crypto
 ## number theory
 ### 有限域GF
-	若p为素数，GF(p)={0,1,2,...,p-1}
+	若p为素数，GF(p)={0,1,2,...,p-1} = Zp
 	生成元g的有限域(阶为q) = {0,g^0,g^1,...,g^(q-2)}
 	Z*p 是与p互素且小于p的集合。
+	在GF(2)上的多项式： a(x) = a0 + a1 * x + a2 * x^2 + ... + an * x^n, ai ∈ GF(2)
+    GF(2^8)中的元素是由 a(x) = a0 + a1 * x + a2 * x^2 + ... + a7 * x^7, ai ∈ GF(2). 因此GF(2^8)由2^8个元素。
+### 线性函数
+	A function f from an Abelian group (A, +) to an Abelian group (B, +) is called linear if and only if f(x + y) = f(x) + f(y) for all x, y ∈ A
+
 ### 群
 #### 循环群
 	a∈群G,其他元素可以用a^k表示，其中a可以称作群的生成元或原根。
+#### Abelian群
+	满足 x*y∈A, *结合律， *交换律， 0*x=x, x*y=0， 其中*是操作符 
 
 ### division algorithm
 	divide a by n -> a = q*n + r -> 0<=r<n; q=floor(a/n)
@@ -73,6 +80,11 @@ public:
     若p为素数且p不能整除a，a^(p-1) 恒等于 1 (mod p)，其中互素的意思是公约数为1。
 	费马小定理通常用来检验一个数是否是素数，是素数的必要非充分条件。满足费马小定理检验的数未必是素数，这种合数叫做卡迈克尔数。
 
+### Chinese Remainder Theorem (CRT)
+	已知两个互不相同的素数，对于任意0<=x1<p, 0<=x2<q, 存在唯一的0<=x<n 使得：
+	x1 = x mod p, and
+	x2 = x mod q
+	因此任意整数0<=x<n, 都可以用(x1, x2)表示。
 ### 二次探测
 	如果p是一个素数，0<x<p,则 x^2 恒等于 1(mod p)的解为 x=1 或 x=p-1.
 
@@ -125,19 +137,59 @@ public:
 
 ---
 ## symmetric cipher
-
+### DES
+	基于Feistel结构。
+	秘钥长度： 64bit, 有效长度 56bit
+	块长： 64bit
+	16轮变换。
+### AES
+	基于SPN网络。
+	分组长度：128bit
+	密钥长度/加密轮数 ：  128/10, 192/12, 256/14
+	* 4个基本操作(一轮)
+		* SubBytes 字节替换，查表。
+		* ShiftRows 左循环移位操作
+		* MixCol 通过矩阵相乘来实现
+		* AddRoundKey 将128位轮密钥Ki同状态矩阵中的数据进行逐位异或操作
+#### attack
+##### timing attack
+	这是一种测信道攻击的方法。
+	如果一个算法的执行时间取决于用户的输入和密钥，那么TA可以获取该算法的密钥。
 ---
 ## asymmetric cipher
 ### EIGamal encryption
-	encrypt: (R,S)=(g^r mod p, m*B^r mod p)
+	encrypt: (R,S)=(g^r mod p, m*B^r mod p)， r是Zp-1中的随机数。
 ### RSA encryption
 	已知两个大素数p,q,n=pq,phi(n)=(p-1)(q-1).
 	1. 任取大整数e,满足gcd(e,phi(n))=1.  公钥=(n,e)
 	2. 确定私钥d，(d*e)mod(phi(n))=1.
 	3. 加密：c=m^e mod n
 	4. 解密：m=c^d mod n
-
+#### RSA-CRT
+	运用CRT定理加速 c^d mod n 的计算。
+```
+dP = (1/e) mod (p-1)
+dQ = (1/e) mod (q-1)
+qInv = (1/q) mod p
+m1 = c^dP mod p
+m2 = c^dQ mod q
+h = qInv*(m1 - m2) mod p
+m = m2 + h*q
+```
+	private key as the quintuple (p, q, dP, dQ, qInv).
 ---
+##### attack
+###### Bellcore 
+	q=gcd(s-s', n), p=n/q. 
+	注： s是正确的签名，s'是错误的签名
+###### lenstra
+	q=gcd(s'^e - x, n), p=n/q.
+	注： s'是错误的签名
+##### reference
+- https://www.di-mgt.com.au/crt_rsa.html : rsa-crt简介
+- https://www.cryptologie.net/article/371/fault-attacks-on-rsas-signatures/ ： lenstra attack
+- https://bham.cloud.panopto.eu/Panopto/Pages/Embed.aspx?id=45d3ffb8-0c86-4c84-b17b-ac72010a50f6 : fault injuction attack
+
 ## stream cipher
 	一次加密一字节或一位数据。
 ### Vernam cipher
