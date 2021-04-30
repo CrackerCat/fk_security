@@ -18,6 +18,19 @@
 		d. 子进程不继承父进程的进程正文（text），数据和其他锁定内存（memory locks）。经过fork()以后，父进程和子进程拥有相同内容的代码段、数据段和用户堆栈，父进程只复制了自己的PCB块。由于copy on write, 代码段，数据段和用户堆栈只有在改变的时候才分配空间。
 		e. 不继承异步输入和输出。
 
+## Centos
+### SCLo
+#### common commands
+- 使用scl工具。
+```
+yum install centos-release-scl
+//下载工具
+yum install devtoolset-7
+//当前登陆session生效
+scl enable devtoolset-7 bash
+source /opt/rh/devtoolset-7/enable
+```
+
 ## Ubuntu  
 ### dpkg  
 一种原始的包管理工具，主要由Debian系列的系统使用。类似的工具，在centos系列中有rpm。  
@@ -36,3 +49,7 @@
 ---
 ### systemctrl
 - systemctrl daemon-reload; systemctrl restart service; 先重新加载服务，再重启服务。
+
+### tool
+#### cloc
+	代码统计工具，支持多平台使用、多语言识别，能够计算指定目标文件或文件夹中的文件数(files)、空白行数(blank)、注释行数(comment)和代码行数(code)。

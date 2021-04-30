@@ -13,6 +13,18 @@ netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netf
 - iptable -D INPUT -s ip -j DROP  //delete rule
 - iptables -L -n 打印规则
 
+### ufw
+	UFW 是标准 Ubuntu 20.04 安装过程中的一部分.
+```sh
+ufw enable/disable：打开/关闭防火墙
+ufw reload：重启防火墙
+ufw status：查看已经定义的ufw规则
+ufw default allow/deny：外来访问默认允许/拒绝
+ufw allow/deny 20：允许/拒绝访问20端口，20后可跟/tcp或/udp，表示tcp或udp封包。
+sudo ufw allow proto tcp from 192.168.0.0/24 to any port 22：允许自192.168.0.0/24的tcp封包访问本机的22端口。
+ufw delete allow/deny 20：删除以前定义的"允许/拒绝访问20端口"的规则
+ufw allow from 10.0.0.163 允许此IP访问所有的本机端口
+```
 ## libpcap
   unix/linux下网络数据包捕获函数库，是大多数网络监控软件的基础。
 
@@ -30,8 +42,8 @@ netfilter 提供一系列表，表中有多个chain,chain中有多个rule。netf
 ## windows connect to linux  
 
 1. install XMing, X Window server.  
-2.  install PuTTY, remote login program.  
-3.  configure sshd_config.  
+2. install PuTTY, remote login program.  
+3. configure sshd_config.  
 
 # Typora  
 markdown editor.  
@@ -60,4 +72,3 @@ iconv -f gb2312 -t utf-8 1.txt> 2.txt
 1. dd if=/dev/zero of=/tmp/mem.swap bs=1M count=4096   (4G)
 2. mkswap /tmp/mem.swap
 3. swapon /tmp/mem.swap
-

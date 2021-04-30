@@ -19,11 +19,14 @@ virt  虚拟化基础结构
 CREDITS 开发者列表  
 Makefile 基本内核的Makefile  
 
-## 内核编译：  
-
-make config : 配置需要编译哪些模块。  
-2.6以后的内核，代码之间的依赖关系会自动维护(无需make dep命令)。  
-make -jn  不正确的依赖可能导致编译过程出错。  
+## 内核编译：
+	1. 设置config  
+		make config : 配置需要编译哪些模块。  遍历选择所要编译的内核特性。
+		make allyesconfig：配置所有可编译的内核特性。
+		可手动配置.config文件。
+	2. 编译
+		2.6以后的内核，代码之间的依赖关系会自动维护(无需make dep命令)。  
+		make -jn  不正确的依赖可能导致编译过程出错。  
 
 ## 安装内核：  
 
@@ -72,6 +75,70 @@ fork的实际开销就是复制整个父进程的页表和给字进程创建唯�
    
 ## security  
 security.c中 security_ops 指向哪个就是使用哪个安全模块(security,smash,tomoyo).  
+
+## net
+### drivers
+#### RTL8169
+	Realtek公司生产的一款千兆以太网卡.
+## modules
+### BPF
+	Berkeley Packet Filter, 主要涉及包过滤这一部分，分析网络流量。
+	他在数据链路层上提供了接口。BPF支持包过滤，允许用户态进程提供一个过滤程序，此程序指定了我们想要接收到那种包。 常见的一些抓包工具的实现都与其有关，比如tcpdump工具。
+	这种机制避免了拷贝一些不需要的包从内核态到进程，极大的提升了性能。
+	seccomp沙箱，在设计时也借用了BPF的思想。
+
+## slab allocator
+	Linux 所使用的 slab 分配器的基础是 Jeff Bonwick 为 SunOS 操作系统首次引入的一种算法。Jeff 的分配器是围绕对象缓存进行的。在内核中，会为有限的对象集（例如文件描述符和其他常见结构）分配大量内存。Jeff 发现对内核中普通对象进行初始化所需的时间超过了对其进行分配和释放所需的时间。因此他的结论是不应该将内存释放回一个全局的内存池，而是将内存保持为针对特定目的而初始化的状态。
+### slab allocator 的主要结构
+![](images/main_structure_of_slabAllocator.jpg "")
+	这是slab 结构的高层组织结构。
+	1. 在最高层是 cache_chain，这是一个 slab 缓存的链接列表。 这对于 best-fit 算法非常有用，可以用来查找最适合所需要的分配大小的缓存（遍历列表）。 cache_chain 的每个元素都是一个 kmem_cache 结构的引用（称为一个 cache）。它定义了一个要管理的给定大小的对象池。
+	2. 每个缓存 kmem_cache 都包含了一个 slabs 列表，这是一段连续的内存块（通常都是页面）。存在 3 种 slab：
+	* slabs_full
+	* slabs_partial
+	* slabs_empty
+		slabs_empty 列表中的 slab 是进行回收（reaping）的主要备选对象。正是通过此过程，slab 所使用的内存被返回给操作系统供其他用户使用。
+	3. slabs 列表中的每个 slab 都是一个连续的内存块（一个或多个连续页），它们被划分成一个个对象。这些对象是从特定缓存中进行分配和释放的基本元素。注意 ** slab 是 slab 分配器进行操作的最小分配单位 **，因此如果需要对 slab 进行扩展，这也就是所扩展的最小值。通常来说，每个 slab 被分配为多个对象。
+	4. 由于对象是从 slab 中进行分配和释放的，因此单个 slab 可以在 slab 列表之间进行移动。例如，当一个 slab 中的所有对象都被使用完时，就从 slabs_partial 列表中移动到 slabs_full 列表中。当一个 slab 完全被分配并且有对象被释放后，就从 slabs_full 列表中移动到 slabs_partial 列表中。当所有对象都被释放之后，就从 slabs_partial 列表移动到 slabs_empty列表中。
+
+## PCI Bus Subsystem
+### /proc/pid/pagemap
+	允许用户空间程序检查页表和相关信息。例如，将虚拟地址转化为物理地址。
+	对于每个虚拟地址，用一个64位的值表示它。 格式如下所示：
+	* Bits 0-54  page frame number (PFN) if present
+	* Bits 0-4   swap type if swapped
+    * Bits 5-54  swap offset if swapped
+    * Bit  55    pte is soft-dirty (see Documentation/vm/soft-dirty.txt), which helps to track which pages a task writes to.
+    * Bit  56    page exclusively mapped (since 4.2)
+    * Bits 57-60 zero
+    * Bit  61    page is file-page or shared-anon (since 3.5)
+    * Bit  62    page swapped
+    * Bit  63    page present 
+
+### Accessing PCI device resources through sysfs
+	sysfs, usually mounted at /sys, provides access to PCI resources on platforms that support it.	
+```
+|-- 0000:17:00.0
+|   |-- class
+|   |-- config
+|   |-- device
+|   |-- enable
+|   |-- irq
+|   |-- local_cpus
+|   |-- remove
+|   |-- resource
+|   |-- resource0
+|   |-- resource1
+|   |-- resource2
+|   |-- revision
+|   |-- rom
+|   |-- subsystem_device
+|   |-- subsystem_vendor
+|   `-- vendor
+```
+	the domain number is 0000 and the bus number is 17 (both values are in hex). This bus contains a single function device in slot 0. 其中文件的含义如下。
+	* resource : PCI resource host addresses (ascii, ro)
+	* resource0..N : PCI resource N, if present (binary, mmap, rw1)
 
 ## 杂项：  
 - powerpc: IBM基于RISC的现代微处理器。  

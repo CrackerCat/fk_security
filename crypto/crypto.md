@@ -117,6 +117,9 @@ public:
 ```
 #### concept
 - taps : 抽头，在LFSR中影响下一个状态的bit位的位置叫做抽头。
+- 语义安全=不可区分性等价于IND-CPA-secure.
+	- 用被挑战者(Challager，别人都翻译成挑战者，我觉得应该叫被挑战者更合适)和攻击者(Adversary)之间的安全游戏(这种游戏实际上是一种交互式证明，是证明哦，回想一下初中几何题)来理解，就是被挑战者给攻击者一个密文和两个明文，攻击者只有一半的机会从加密后的密文猜对对应的明文，几乎等同于瞎猜。
+	- 语义安全是一种基本的安全，就是窃听者不能获取明文内容，但是窃听者除了窃听以外，其他什么也不能做，不能提问。满足语义安全，才是一个基本的现代加密方案。
 
 ---
 ## convention cipher
@@ -214,3 +217,76 @@ m = m2 + h*q
 ### replay attack
 	重放攻击(Replay Attacks)又称重播攻击、回放攻击，是指攻击者发送一个目的主机已接收过的包，来达到欺骗系统的目的，主要用于身份认证过程，破坏认证的正确性。
 ---
+## application
+### base64
+	一种基于64个可打印字符来表示二进制数据的方法。 输出内容中包括两个以上“符号类”字符（+, /, =)。
+	Base64是一种任意二进制到文本字符串的编码方法，常用于在URL、Cookie、网页中传输少量二进制数据。
+	Base64要求把每三个8Bit的字节转换为四个6Bit的字节（3*8 = 4*6 = 24），然后把6Bit再添两位高位0，组成四个8Bit的字节。
+#### 加密规则
+	关于这个编码的规则：
+	①. 把3个字节变成4个字节。 在[A-Za-z0-9+/](ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/)中按下标查找对应字符。
+	②. 每76个字符加一个换行符。
+	③. 最后的结束符也要处理。
+	特征是查表转化。
+#### 解密规则
+	解码是编码的反向过程，每次取出4个字节，然后将每个字节的字符转换成原始Base64索引表对应的索引数字，也就是编码时3字节转换成4字节的转换结果。然后使用位操作将每字节前2位去掉，重新转换成3字节。需要注意的是最后对于结尾“=”的处理。
+	特征是char2index, >>4, >>2, <<6。
+
+### tea算法
+	属于流密码，每次对两个四字节数据，进行32轮变换。
+	该算法得特征如下。
+	1. 特征量：0x9e3779b9
+	2. key: 4*32 = 128 bit {x1,x2,x3,x4}
+	3. 传入两个32位无符号整数
+	4. 三个累加量，其中最后赋值给传入的参数
+	5. 存在<<4 , >>5 , xor等操作
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+//加密函数
+void encrypt (uint32_t* v, uint32_t* k) {
+    uint32_t v0=v[0], v1=v[1], sum=0, i;           /* set up */
+    uint32_t delta=0x9e3779b9;                     /* a key schedule constant */
+    uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
+    for (i=0; i < 32; i++) {                       /* basic cycle start */
+        sum += delta;
+        v0 += ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+        v1 += ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
+    }                                              /* end cycle */
+    v[0]=v0; v[1]=v1;
+}
+
+//解密函数
+void decrypt (uint32_t* v, uint32_t* k) {
+    uint32_t v0=v[0], v1=v[1], sum=0xC6EF3720, i;  /* set up */
+    uint32_t delta=0x9e3779b9;                     /* a key schedule constant */
+    uint32_t k0=k[0], k1=k[1], k2=k[2], k3=k[3];   /* cache key */
+    for (i=0; i<32; i++) {                         /* basic cycle start */
+        v1 -= ((v0<<4) + k2) ^ (v0 + sum) ^ ((v0>>5) + k3);
+        v0 -= ((v1<<4) + k0) ^ (v1 + sum) ^ ((v1>>5) + k1);
+        sum -= delta;
+    }                                              /* end cycle */
+    v[0]=v0; v[1]=v1;
+}
+
+int main()
+{
+    uint32_t k[4]={2,2,3,4};
+    // v为要加密的数据是两个32位无符号整数
+    // k为加密解密密钥，为4个32位无符号整数，即密钥长度为128位
+
+    //exchange scale
+    uint32_t flagLong[2];
+    flagLong[0] = 0x67d7b805;
+    flagLong[1] = 0x63c174c3;
+    decrypt(flagLong,k);
+    printf("flag{%x-%x}\n",flagLong[0],flagLong[1]);
+
+    return 0;
+}
+```

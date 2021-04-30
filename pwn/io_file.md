@@ -4,6 +4,7 @@
   typedef struct _IO_FILE FILE;
   _IO_FILE结构外包裹着另一种结构_IO_FILE_plus，其中包含了一个重要的指针vtable指向了一系列函数指针,需要注意参数。在libc2.23版本下，32位的vtable偏移为0x94，64位偏移为0xd8。
 ```c
+// libio.h
 struct _IO_FILE {
   int _flags;       /* High-order word is _IO_MAGIC; rest is flags. */
   /* The following pointers correspond to the C++ streambuf protocol. */
@@ -34,6 +35,8 @@ struct _IO_FILE_plus
     _IO_FILE    file;
     IO_jump_t   *vtable;
 }
+
+extern struct _IO_FILE_plus *_IO_list_all;
 
 extern struct _IO_FILE_plus _IO_2_1_stdin_;
 extern struct _IO_FILE_plus _IO_2_1_stdout_;
@@ -105,14 +108,14 @@ void * funcs[] = {
   puts在源码中实现的函数是_IO_puts，这个函数的操作与fwrite的流程大致相同，函数内部同样会调用vtable中的_IO_sputn，结果会执行_IO_new_file_xsputn，最后会调用到系统接口write函数。
 
 # 伪造vtable劫持程序流程
-  伪造vtable劫持程序流程的中心思想就是针对_IO_FILE_plus的vtable动手脚，通过把vtable指向我们控制的内存，并在其中布置函数指针来实现。
+  **伪造vtable劫持程序流程**的中心思想就是针对_IO_FILE_plus的vtable动手脚，通过把vtable指向我们控制的内存，并在其中布置函数指针来实现。
   vtable劫持分为两种，一种是直接改写vtable中的函数指针，通过任意地址写就可以实现,需要libc支持libc数据段可修改。另一种是覆盖vtable的指针指向我们控制的内存，然后在其中布置函数指针。
   vtable中的函数调用时会把对应的_IO_FILE_plus指针作为第一个参数传递。eg: memcpy(fp,"sh",3);
   如果程序中不存在fopen等函数创建的_IO_FILE时，也可以选择stdin\stdout\stderr等位于libc.so中的_IO_FILE，这些流在printf\scanf等函数中就会被使用到。在libc2.23之前，这些vtable是可以写入并且不存在其他检测的。
 
 # FSOP(File Stream Oriented Programming)
   根据前面对FILE的介绍得知进程内所有的_IO_FILE结构会使用_chain域相互连接形成一个链表，这个链表的头部由_IO_list_all维护。
-  FSOP的核心思想就是劫持_IO_list_all的值来伪造链表和其中的_IO_FILE项，但是单纯的伪造只是构造了数据还需要某种方法进行触发。FSOP选择的触发方法是调用_IO_flush_all_lockp，这个函数会刷新_IO_list_all链表中所有项的文件流，相当于对每个FILE调用fflush，也对应着会调用_IO_FILE_plus.vtable中的_IO_overflow。
+  FSOP的核心思想就是**劫持_IO_list_all的值**来伪造链表和其中的_IO_FILE项，但是单纯的伪造只是构造了数据还需要某种方法进行触发。FSOP选择的触发方法是调用_IO_flush_all_lockp，这个函数会刷新_IO_list_all链表中所有项的文件流，相当于对每个FILE调用fflush，也对应着会调用_IO_FILE_plus.vtable中的_IO_overflow。
 
   _IO_flush_all_lockp不需要攻击者手动调用，在一些情况下这个函数会被系统调用：
 - 当libc执行abort流程时
@@ -135,6 +138,9 @@ if (((fp->_mode <= 0 && fp->_IO_write_ptr > fp->_IO_write_base)
 ```
 - fp->mode <=0
 - fp->_IO_write_ptr > fp->_IO_write_base 
+
+### usage
+	1. 利用unsortedbin attack修改bk并且malloc分割unsortedbin, 因此触发fsop -> 修改_IO_list_all的值为 main_arena+n ->  (_IO_FILE_plus*)(main_arena+n)->_chain = 剩下的unsortedbin空间的地址。 -> 剩下的unsortedbin空间要改成 io_file(其vtable改成伪造的空间)  -> 触发_IO_file_overflow. 
 
 # 新版本libc下IO_FILE的利用
   在_IO_FILE中_IO_buf_base表示操作的起始地址，_IO_buf_end表示结束地址，通过控制这两个数据可以实现控制读写的操作。经测试，_IO_2_1_stdin+56的内存空间内容=全局缓冲区buf的地址。
@@ -159,7 +165,7 @@ IO_validate_vtable (const struct _IO_jump_t *vtable)
 }
 
 ```
-  新版本（libc2.24以上）的防御机制会检查vtable的合法性，不能再像之前那样改vatable为堆地址，但是_IO_str_jumps是一个符合条件的 vtable，改 vtable为 _IO_str_jumps即可绕过检查。
+  新版本（libc2.24以上）的防御机制会检查vtable的合法性，不能再像之前那样改vtable为堆地址，但是除了_IO_file_jumps 虚表，还有_IO_str_jumps是一个符合条件的 vtable，改 vtable为 _IO_str_jumps即可绕过检查。
 
 ```
 #define JUMP_INIT_DUMMY JUMP_INIT(dummy, 0), JUMP_INIT (dummy2, 0)
@@ -190,10 +196,134 @@ const struct _IO_jump_t _IO_str_jumps libio_vtable =
   
 ```
 ### 利用思路
-   * 方法一
-   IO_str_overflow 函数会调用 FILE+0xe0处的地址。这时只要我们将虚表覆盖为 IO_str_jumps将偏移0xe0处设置为one_gadget即可。
-   * 方法二
-   还有一种就是利用io_finish函数，同上面的类似， io_finish会以 IO_buf_base处的值为参数跳转至 FILE+0xe8处的地址。执行 fclose（ fp）时会调用此函数，但是大多数情况下可能不会有 fclose（fp），这时我们还是可以利用异常来调用 io_finish，异常时调用 IO_OVERFLOW是根据IO_str_overflow在虚表中的偏移找到的， 我们可以设置vtable为IO_str_jumps-0x8异常时会调用io_finish函数。
+#### 方法一 _IO_str_jumps -> overflow -> 劫持控制流
+   如果我们能设置文件指针的 vtable 为 _IO_str_jumps 么就能调用不一样的文件操作函数。这里以_IO_str_overflow为例子：
+```
+int
+_IO_str_overflow (_IO_FILE *fp, int c)
+{
+  int flush_only = c == EOF;
+  _IO_size_t pos;
+  if (fp->_flags & _IO_NO_WRITES)// pass
+      return flush_only ? 0 : EOF;
+  if ((fp->_flags & _IO_TIED_PUT_GET) && !(fp->_flags & _IO_CURRENTLY_PUTTING))
+    {
+      fp->_flags |= _IO_CURRENTLY_PUTTING;
+      fp->_IO_write_ptr = fp->_IO_read_ptr;
+      fp->_IO_read_ptr = fp->_IO_read_end;
+    }
+  pos = fp->_IO_write_ptr - fp->_IO_write_base;
+  if (pos >= (_IO_size_t) (_IO_blen (fp) + flush_only))// should in 
+    {
+      if (fp->_flags & _IO_USER_BUF) /* not allowed to enlarge */ // pass
+    return EOF;
+      else
+    {
+      char *new_buf;
+      char *old_buf = fp->_IO_buf_base;
+      size_t old_blen = _IO_blen (fp);
+      _IO_size_t new_size = 2 * old_blen + 100;
+      if (new_size < old_blen)//pass 一般会通过
+        return EOF;
+      // 劫持控制流的位置 target
+      new_buf
+        = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);//target [fp+0xe0]
+      if (new_buf == NULL)
+        {
+          /*      __ferror(fp) = 1; */
+          return EOF;
+        }
+      if (old_buf)
+        {
+          memcpy (new_buf, old_buf, old_blen);
+          (*((_IO_strfile *) fp)->_s._free_buffer) (old_buf);
+          /* Make sure _IO_setb won't try to delete _IO_buf_base. */
+          fp->_IO_buf_base = NULL;
+        }
+      memset (new_buf + old_blen, '\0', new_size - old_blen);
+
+      _IO_setb (fp, new_buf, new_buf + new_size, 1);
+      fp->_IO_read_base = new_buf + (fp->_IO_read_base - old_buf);
+      fp->_IO_read_ptr = new_buf + (fp->_IO_read_ptr - old_buf);
+      fp->_IO_read_end = new_buf + (fp->_IO_read_end - old_buf);
+      fp->_IO_write_ptr = new_buf + (fp->_IO_write_ptr - old_buf);
+
+      fp->_IO_write_base = new_buf;
+      fp->_IO_write_end = fp->_IO_buf_end;
+    }
+    }
+
+  if (!flush_only)
+    *fp->_IO_write_ptr++ = (unsigned char) c;
+  if (fp->_IO_write_ptr > fp->_IO_read_end)
+    fp->_IO_read_end = fp->_IO_write_ptr;
+  return c;
+}
+libc_hidden_def (_IO_str_overflow)
+```
+   代码中，有一个是利用字段调用函数，可用来劫持程序流程：
+```
+new_buf
+        = (char *) (*((_IO_strfile *) fp)->_s._allocate_buffer) (new_size);
+```
+   几个条件需要bypass:
+   1. fp->_flags & _IO_NO_WRITES为假
+   2. (pos = fp->_IO_write_ptr - fp->_IO_write_base) >= ((fp->_IO_buf_end - fp->_IO_buf_base) + flush_only(1))
+   3. fp->_flags & _IO_USER_BUF(0x01)为假
+   4. 2*(fp->_IO_buf_end - fp->_IO_buf_base) + 100 不能为负数
+   5. new_size = 2 * (fp->_IO_buf_end - fp->_IO_buf_base) + 100; 应当指向/bin/sh字符串对应的地址
+   6. fp+0xe0指向system地址
+   
+   构造：
+```
+_flags = 0
+_IO_write_base = 0
+_IO_write_ptr = (binsh_in_libc_addr -100) / 2 +1
+_IO_buf_base = 0
+_IO_buf_end = (binsh_in_libc_addr -100) / 2 
+
+_freeres_list = 0x2
+_freeres_buf = 0x3
+_mode = -1
+
+vtable = _IO_str_jumps
+```
+   FILE+0xd8时vtable, IO_str_overflow 函数会调用 FILE+0xe0处的地址。这时只要我们将虚表覆盖为 IO_str_jumps将偏移0xe0处设置为one_gadget即可。
+	
+#### 方法二 _IO_str_jumps -> finish -> 劫持控制流
+   还有一种就是利用io_finish函数，原理同上面的类似， io_finish会以 IO_buf_base处的值为参数跳转至 FILE+0xe8处的地址。执行 fclose（ fp）时会调用此函数，但是大多数情况下可能不会有 fclose（fp），这时我们还是可以利用异常来调用 io_finish，异常时调用 IO_OVERFLOW是根据IO_str_overflow在虚表中的**偏移**找到的， 我们可以设置vtable为IO_str_jumps-0x8异常时会调用io_finish函数。 即 修改io_finish的配置 -> 调用 IO_OVERFLOW, 即调用io_finish。
+```
+void
+_IO_str_finish (_IO_FILE *fp, int dummy)
+{
+  if (fp->_IO_buf_base && !(fp->_flags & _IO_USER_BUF))
+    (((_IO_strfile *) fp)->_s._free_buffer) (fp->_IO_buf_base);  //[fp+0xe8]
+  fp->_IO_buf_base = NULL;
+
+  _IO_default_finish (fp, 0);
+}
+```
+   利用条件：
+   1. _IO_buf_base 不为空
+   2. _flags & _IO_USER_BUF(0x01) 为假
+   构造如下：
+```py
+_flags = (binsh_in_libc + 0x10) & ~1
+_IO_buf_base = binsh_addr
+
+_freeres_list = 0x2
+_freeres_buf = 0x3
+_mode = -1
+vtable = _IO_str_finish - 0x18
+fp+0xe8 -> system_addr
+```
+
+#### 方法3 fileno 与缓冲区的相关利用
+   _IO_FILE 在使用标准 IO 库时会进行创建并负责维护一些相关信息，其中有一些域是表示调用诸如 fwrite、fread 等函数时写入地址或读取地址的，如果可以控制这些数据就可以实现任意地址写或任意地址读。
+   在_IO_FILE 中_IO_buf_base 表示操作的起始地址，_IO_buf_end 表示结束地址，通过控制这两个数据可以实现控制读写的操作。
+
+## pwntools
+	FileStructure() 返回 FILE 结构体
 
 # other
 ## exit函数()分析

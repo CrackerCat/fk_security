@@ -99,6 +99,7 @@ def rt_sigreturn_stack_frame(rt_sigreturn, rax, rdi, rsi, rdx, rbp, rsp, rip):
 	2. 利用libc里write,puts中的地址， 函数偏移地址不变，得到system的运行地址。  
 
 ---
+
 ## ret2csus
 	主要利用__libc_csu_init中的gadget, 可以控制rdi,rsi,rdx这三个寄存器，还能控制ip寄存器。
     可以用来调用任意少于或等于三个参数的函数，例如execve()。
@@ -172,6 +173,19 @@ def csu(rbx, rbp, r12, r13, r14, r15, last):
 - https://www.anquanke.com/post/id/205858 ： 解释性文章
 
 ---
+## usable gadget
+	1. rdi可控时。
+```assembly
+mov rbp, [rdi+48h]
+mov rax, [rbp+18h]
+lea r13, [rbp+10h]
+mov dword ptr [rbp+10h], 0
+mov rdi, r13
+call qword ptr [rax+28h]
+```
+	rdi 可控 -> rbp, rax 可控 -> 在[rax+28h] 出放上 leave_retn 即可实现栈迁移。 可用于栈迁移到堆上。
+
+---
 ## canary  
 	当函数返回之时检测canary的值是否经过了改变，以此判断stack/buffer overflow 是否发生。  
 	canary 与 windows下的GS保护都是防止栈溢出的手段。  
@@ -182,6 +196,7 @@ def csu(rbx, rbp, r12, r13, r14, r15, last):
 ### canary 实现原理  
 ![](image/canary_struct.png 'canary struct')  
 	启用canary，函数体多了几个操作，取fs寄存器0x28处的值，存放在$ebp -0x8/0x4的位置，函数返回之前，再与fs:0x28的值异或。如果canary非法修改，会走__stack_chk_fail(glibc中的函数，打印stack smashing detected),默认延迟绑定。  
+	每次进程重启后的 Canary 不同 (相比 GS，GS 重启后是相同的)，但是同一个进程中的不同线程的 Canary 是相同的， 并且 通过 fork 函数创建的子进程的 Canary 也是相同的。每个函数的canary是相同的。
 	解决方法： 劫持__stack_chk_fail的got值劫持流程或者利用__stack_chk_fail泄漏内容。fs寄存器 指向的是当前栈的TLS结构(tcbhead_t结构体），fs:0x28指向的是stack_guard指针(存的是stack_chk_fail)，TLS的值是由security_init进行初始化  
 
 ### canary绕过技术  
@@ -253,8 +268,9 @@ canary 设计为以0x00结尾，为了保证截断字符串。
 ##### 爆破思路
 	爆破失败会导致程序奔溃，此时io会断开连接，因此调用io.recv()(在这之前必须没有可以收到的数据)会触发一个EOFError。由于这个特性，我们可以使用python的try...except...来捕获这个错误并进行处理。
 ```python
+// 判断程序是否崩溃
 try:
-    io.recv(timeout=1)    
+    io.recv(timeout=1)  or io.send()
 except EOFError as e:
     io.close()
     continue
@@ -270,8 +286,39 @@ else:
 ### exploit
 	1. 修改rbp.
 	2. 执行leave;ret； -> 更新rbp的值。
-	  2.1 跳转到bss或其他可修改的内存段。
+	  2.1 跳转到bss或其他可修改的内存段。 -> control rip/data. or 控制rbp寻址的变量。
 
+## 特性
+### ARMv8.3-A中的安全特性：指针验证
+	用于防御ROP/JOP攻击的指针验证。
+	这个特性会对寄存器的内容在间接分支和数据引用作为地址使用前进行验证，64位地址的一些最高有效位会作为Pointer Authentication Code (PAC)和地址本身一起存在，验证失败的地址会造成一个异常。
+	不管是Intel CET还是ARMv8.3-A的PA，作为硬件类CFI实现都还停留在未投产阶段，期待未来这些硬件实现可以为目前最强的CFI实现PaX_RAP提供更好的性能提升。
+#### 原理
+	指针的高位用于存储指针身份验证代码（PAC），该功能本质上是对指针值和一些上下文进行加密签名。插入到指针未使用的位中的加密签名称为“指针身份验证码”或PAC。这将指针中未使用的位可用于存储其他数据。在指针验证的情况下，这些位将用于存储关于原始64位指针值和64位上下文值的验证码。 We could insert a PAC into each pointer we want to protect before writing it to memory, and verify its integrity before using it.
+
+	白皮书建议使用称为QARMA的分组密码。 根据白皮书，QARMA是专门为指针身份验证设计的“轻量级可调整分组密码的新家族”。 
+	标准中使用的变体QARMA-64，将一个128位秘密密钥，一个64位明文值（指针）和一个64位调整项（上下文）作为输入，产生一个64位密文作为输出。截断的密文成为PAC，该PAC将插入到指针的未使用扩展位中。
+	该体系结构提供5个秘密的128位指针身份验证密钥。APIAKey和APIBKey用于指令指针。APDAKey和APDBKey用于数据指针。APGAKey是一个特殊的“通用”密钥，用于通过PACGA指令对较大的数据块进行签名。这些密钥的值是通过写入特殊系统寄存器来设置的。
+
+	引入了特殊指令，以向指针添加身份验证代码，并验证经过身份验证的指针的PAC并恢复原始指针值。
+	ARMv8.3-A引入了三种新的用于处理PAC的指令类别：
+	- PAC* 指令生成PAC并将其插入指针的扩展位。 例如，对于PACIA X8，X9将使用X9中的值作为上下文，在A指令密钥APIAKey下计算寄存器X8中指针的PAC ，然后将所得的PAC'd指针写回到X8中。
+	- AUT* 指令验证指针的PAC（以及64位上下文值）。如果PAC有效，则将PAC替换为原始扩展位。否则，如果PAC无效（表明该指针已被篡改），则将错误代码放置在指针的扩展位中，以便在取消引用指针时触发错误(异常处理函数中进行分辨)。例如，AUTIA X8，X9将使用X9作为上下文在A指令密钥下验证X8中PAC的指针，如果成功，则将有效指针写回X8 ，否则写入无效值。
+	- XPAC* 指令删除指针的PAC并恢复原始值，而无需执行验证。
+	
+	除了这些通用的“指针认证”指示之外，还引入了许多专门的变体，以将“指针认证”与现有操作结合起来。
+	- BLRA* 指令执行组合的身份验证和分支操作。
+	- LDRA* 指令执行组合的身份验证和加载操作。
+	- RETA* 指令执行组合的身份验证和返回操作。
+
+#### compilation
+	gcc使用-march=armv8.3a -mbranch-protection=pac-ret。
+#### sample use cases
+	
+
+#### reference
+- https://www.qualcomm.com/media/documents/files/whitepaper-pointer-authentication-on-armv8-3.pdf : 详解
+- https://googleprojectzero.blogspot.com/2019/02/examining-pointer-authentication-on.html : 例子
 ---
 ## other
 - red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。

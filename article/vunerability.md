@@ -201,8 +201,154 @@
 
 -----------------------------------------------------------------------------------------------------
 --
+### Automatically Identifying Security Checks for Detecting Kernel Semantic Bugs
+	研究 安全检查。
+	We observe that security checks are in fact very informative in inferring critical semantics in OS kernels.
+	a. 系统地研究安全检查，并且提出了一种自动化识别OS内核中安全检查的方法。
+	b. 提供多个分析器，包含NULL-pointer dereferencing, missing error handling, and double fetching。
+	c. 用 Linux kernel 和 FreeBSD kernel 进行评估方法。
+#### 1. Introduction
+	a. 介绍安全检查。
+	b. 描述安全检查的代码语义，列举安全检查实例，以及实例跟漏洞的关系。识别危险变量的作用。
+	c. 识别安全检查的重要性。
+	d. 说明安全检查识别是一个有挑战性的问题。
+	e. 简要介绍本文的方法。
+	f. 介绍成果
+	贡献：
+	- A study of security checks.
+	- Automatic identification of security checks.
+	- Detection of three classes of semantic bugs.
+	- A new, open-source tool.
+#### 2. A Study of Security Checks
+##### 2.1 Definition of Security Checks
+##### 2.2 Handling Security-Check Failures
+	FH: 1) 返回错误码. 2) 停止执行. 3) 修正错误码. 4) 发布错误信息.
+#### 3. CHEQ: Identifying Security Checks
+##### 3.1 A Motivating Example
+##### 3.2 Approach Overview
+##### 3.3 Finding Error-Handling Functions and Error Codes
+##### 3.4 Identifying FH Primitives
+##### 3.5 Constructing FH Graph
+##### 3.6 Identifying Security Checks
+#### 4. Detecting Critical Kernel Semantic Bugs ？/存在水分
+##### 4.1 Detecting Null-Pointer Dereferencing
+	1. 先找到NULL指针的安全检查
+	2. 后向查找是哪个函数(A)的返回值
+	3. 从每个调用A的位置，前向查找对返回值的使用
+	4. 基于 check/(check+uncheck) 比例，推测缺失安全检查
+##### 4.2 Detecting Missing Error Handling
+	1. 先找到可能会返回异常代码的函数
+	2. 然后计算对它的返回值做了多少次安全检查
+##### 4.3 Detecting Double-Fetch Bugs
+	介绍实例，解释bug类型。
+	说明检测方法。
+#### 5. Implementation
+#### 6. Evaluation
+	Linux kernel and BSD kernel
+##### 6.1 Evaluating Security-Check Identification
+	a. 统计结果
+![](images/cheq_statistical_results.jpg "")
 
-### Detecting Missing-Check Bugs via Semantic- and Context-Aware
+	b. False Negatives
+		1. 简单描述计算方法。
+		2. 描述漏报率以及原因
+	c. False Positives 
+		1. 随机抽样分析结果。
+		2. 描述抽样结果。
+		3. 分析误报的原因。
+		4. 怎么解决？（可选)
+	d. Scalability
+		描述实验环境以及运行时空情况。
+	e. Generality
+		描述通用性。
+##### 6.2 Evaluating Semantic-Bug Detection
+	为了证明安全检查的有用性，我们描述了在Linux 和 FreeBSD kernel 上bug检测的结果。由于有限的空间，我们将主要描述Linux的细节。
+	To demonstrate the usefulness of security checks, we describe the results of our bug detection on both the Linux and FreeBSD kernels. Due to limited space, we will primarily focus on the details for the Linux kernel.
+	设置比例阈值，获取输出结果，手工确认分析结果。、
+	a. NULL-pointer dereferencing bugs.
+	b. Missing error handling bugs.
+	c. Double-fetch bugs.
+	We believe that the promising bug-detection results mainly benefit from CHEQ’s identification of security checks, which helps automatically infer what are critical and erroneous, and thus eliminate overwhelming false reports.
+#### 7 Related Work
+	总结方法的创新性。
+	1. 叙述前人的工作。
+	2. 与其他方法对比，cheq的先进性。
+#### 8 结论
+#### 9 感谢
+#### reference
+
+### OOPSLA11 - RoleCast: finding missing security checks when you do not know what checks are.
+
+### CCS19 - Detecting Missing-Check Bugs via Semantic- and Context-Aware Criticalness and Constraints Inferences
+	我们进一步提出对等切片构建去收集享有相似语义和上下文的危险变量切片。这些切片可以用于交叉检查潜在缺失安全检查的危险变量。
+	贡献点：
+	a. 一个缺失安全检查漏洞检测工具。
+	b. 多个新技术。 1. 对等语义切片构建识别具有相似的语义和上下文的代码路径。   2. 自动化的危险变量推断找到目标，缩小了目标范围。  3. 两层类型分析。
+	c. 许多Linux Kernel bugs.
+#### 2 Missing Checks in OS Kernels
+	从NVD中抽样200个最近的漏洞，分析后得知其中有119(59.5%)个是用安全检查修复的。
+##### 2.1 Impact of Missing-Check Bugs
+	a. 多少安全漏洞是由安全检查缺失导致的。
+	b. 缺失安全检查导致的漏洞类型。
+	c. 缺失安全检查导致的漏洞影响力。
+#### 4 Design of CRIX
+##### 4.2 Identifying Critical Variables
+###### 4.2.1 Identifying Security Checks for Critical Variables
+	CRIX 首先使用 LRSan 中的方法识别安全检查。 IF语句存在两个分支，一个处理安全检查失败(a. 返回错误码. b. 调用异常处理函数)，另一个继续正常执行流程。因此，识别安全检查需要符合这样的错误处理模式。 然而， LRSan 仅支持错误码返回的场景， CRIX扩展了这个功能。
+	Linux kernel 中的基本异常处理函数大多用汇编实现，例如BUG(), panic()等。
+	为了确保基于启发式的方法报告正确的异常处理函数，我们手动过滤误报的cases. 
+	最后，将CRIX和LRSan的结果进行比较，对比安全检查数量。
+	一旦找到我们识别到安全检查，我们就把检查对象作为危险变量。
+###### 4.2.2 Identifying Sources and Uses of Critical Variables
+	Sources: 危险变量从哪儿传播过来的？
+	Uses: 危险变量在哪儿被使用？
+	inter-procedural 数据流分析： 后向分析识别源头，前向分析识别使用。  确保都是危险变量？
+	* Definition of sources
+		过程间后向数据流分析收集 sources.
+		* 错误码常数
+		* 某种函数的返回值或者参数， 例如不可信的输入函数。
+		* 全局变量
+		* others: When CRIX cannot find a predecessor instruction, the current values are marked as sources.
+		* 后向查找父基本块
+		* allocation 不可能是 source.
+		* 若SCOpd = LoadInst取出的数据，那么找到LoadInst的地址别名，判断是否属于LI所属基本块的前驱(前向分析)。  分析 StoreInst 和 CallInst的参数。 
+	* Definition of uses
+		过程间前向数据流分析收集 uses.
+		* 指针解引用
+		* 内存索引访问
+		* 二元操作
+		* None. 其他认为是没有对危险变量进行使用。
+![](images/Collect_sources_and_uses_of_critical_variables.jpg "")
+		CVUseSet 包含CV的立即使用，通过LLVM的value.users()函数获取。
+	Criticalness is instead inferred by measuring how frequently a critical variable is checked before being used。
+##### 4.3 Constructing Peer Slices
+	1. 从危险变量的源头构建前向切片。
+	2. 从危险变量的使用构建后向切片。
+	3. 交叉检查切片找到缺失检查的场景。
+	存在路径爆炸和语义上下文不相关问题。
+	为了解决这个问题，针对source和use引入对等切片构建。
+
+	对等切片构建满足两个要求：
+	a. 足够多的对等切片。
+	b. 对等切片满足相似的语义和上下文。
+	call和return指令会产生对等路径。
+	尤其，
+	对于source，非直接调用和返回指令有多个目标。 在非直接调用中， 所有callee的参数都来源于同一个caller函数的参数。
+	对于use, 当被使用的危险变量是当前某个函数A的参数，对函数A的直接调用会产生很多边。参数从不同caller传递到同一个callee函数A，他们在相似上下文上享有相似的语义。
+
+![](images/peer_slices.jpg "")
+	对于source 和 use, 找到不同类型的对等路径如上图所示。
+	对于每个危险变量源头，执行前向数据流分析。 当遇到非直接调用并且将source作为参数，我们收集所有的非直接调用callee，并将它们作为对等路径。 类似的，当遇到一个返回指令，我们分析是否返回一个危险变量或者是否危险变量被写进参数所指向的内存。 如果是这样，把调用callee函数指令之后的caller当作对等路径。
+	对于每个危险变量的使用，执行后向数据流分析。 如果危险变量是当前函数A的参数，所有调用函数A的caller都是对等路径。
+	切片遇到 条件语句或者路径结尾 结束。因此，每个切片最多一个条件语句。？？ 遇到checker函数也应该结束。？？未对切片进行形式化说明。
+	Note that ending at the closest conditional statement would not cause false negatives because the slices sets are collected in a recursive manner？？？ 有问题？
+
+	对于每个危险变量的源头和使用，对等切片分成四类：
+	* Source-ret - Case B
+	* Source-param - Case B
+	* Source-Arg - Case A
+	* Use-Param - Case C
+ 
 #### 6 evaluation
 ##### 6.4 False Positives
 	1. 不精确的指向分析
@@ -215,6 +361,9 @@
 		使用check函数进行隐式的检查。
 		维护一个checker函数的列表解决这个问题？
 	4. 程序越小，误报率越高，因为对等切片少。
+	
+	新增：
+	5. ret 获取的危险变量，在之后的数据流未使用。
 ##### 6.5 False Negatives
 	类型逃逸分析消除漏报率。
 	多层类型分析增加对struct，array, global variable, and vector等类型的支持。
@@ -230,6 +379,75 @@
 #### reference
 - https://www.youtube.com/watch?v=0pDNH-1pvzc : 视频
 
+#### code
+	Ctx->SecurityCheckSets[F] : F内所有SecurityCheck.
+	Ctx->CheckInstSets[F] : F内所有的SecurityCheckInst.
+	DataFlowAnalysis::findInFuncSourceCV : 在当前函数内追溯危险变量的源头。
+	MissingChecksPass::identifyCheckedTargets : 查找危险变量的源头。
+
+#### CVE
+- CVE-2019-15030 : 安全检查位置不准确导致的安全检查缺失bug。 -> 安全检查bug检测标准。
+- CVE-2019-14821： 安全检查约束不完整或者不准确导致安全检查缺失bug。 -> 安全检查bug检测标准。 
+- CVE-2019-15098： 安全检查缺失导致空指针引用bug。 -> 安全检查bug检测标准。
+- CVE-2019-14896/14897： 安全检查缺失导致缓冲区溢出bug。
+注: bug描述以及修复方法：https://git.kernel.org/pub
+
+#### thinking
+- 除了做交叉约束检查，安全检查切片还可以做什么？ 用安全检查切片辅助漏洞发现。
+- 非直接调用场景必须要有调用指令？ ->  不可信目标导致漏报？
+- kernel -> source code -> scalibility.
+- 交叉检查 ->  切片相似度匹配方法改进？
+- ret 获取的危险变量，在之后的数据流未使用？ -> decrease fp.
+- ret 场景未写入变量？需要修复？
+- 这三类切片场景的头尾不明确？头尾的怎么确定？
+- 安全检查的准确性 -- incorrect or inaccurate
+- 在一个函数体内，对同一个危险变量有多个不同的安全检查，那么与其他对等切片的语义判断？ 一样的？
+- 关于变量域的安全检查切片，如何交叉检查是一个问题？
+- 安全检查函数的结果分析？
+- 若是一个全新的bug，所有切片都没有安全检查，那么可以通过添加一个安全检查从而找到其他缺失检查的位置？
+-------------------------------------------------------------------------------------------------------
+
+### CCS20 - Exaggerated Error Handling Hurts! An In-Depth Study and Context-Aware Detection
+	研究 安全处理。
+	OS因各种不合理的输入而触发许多种错误。 为了稳定性，开发者捕获并处理这些潜在的errors。 现存研究集中在错误处理的完备性和充分性。 we find that handling an error with an over-severe level (e.g., unnecessarily terminating the execution) instead hurts the security and reliability. We call such a case Exaggerated Error Handling (EEH). 分析EEH bugs的影响力。 至今无人研究检测EEH。
+	本文工作。
+	1. first conduct an in-depth study on EEH。
+	2. 基于 study, propose an approach,EeCatch, to detect EEH bugs in a context-aware manner. 识别错误，extract 上下文（空间与时间）并且自动化推断错误处理的适合的severity level。 最后 EeCatch使用推断的危险程度去检测EHH bugs（它使用的错误处理函数超过了推断的危险程度)。
+	3. 实验结果分析。 对潜在的bug进行人工确认。向社区提交 patches. 最后社区修复48个 EHH bugs, 从而验证了EeCatch的有效性。 To the best of our knowledge, we are the first to system-atically study and detect EEH bugs. We hope the findings could raise the awareness of the critical consequences of EEH bugs to help developers avoid them.
+#### INTRODUCTION
+	1. 描述 EH 处理的场景。 根据实验说明，EH处理的普遍性。
+	2. 基于 危险性，将错误处理分成多个级别。 While less-severe errors require only warning or logging,more-severe errors may warrant the termination of whole-systemexecution. EEH: if the impact of the EH is more severe thanthe actual consequences of the error, it unexpectedly introducessecurity and reliability issues such as unnecessarily crashing thekernel. 举实例：利用上下文关系，降低错误的处理级别，将错误交给caller处理。 
+	3. 根据研究，分析 EEH bugs产生的原因。 大多数是因为 incorrect reasoning about the severity of the error and (2) improper use of assertions in production code. 如何用数据说明EEH bugs的产生原因？
+	4. EEH bugs的危害。 通过调研内核奔溃样例的方式，说明EEH bugs样例的普遍性。 如何用数据体现EEH bugs的种类分析的正确性？
+	5. 说明EEH是一个至今无人研究的领域，目前都是对错误处理的研究都体现在完备性和充分性 (-- 需要论文支撑)。 接着突出自己的主题。
+	6. 阐述检测EEH bugs 所要遇到的挑战。 
+		a. 对于相同的错误，错误处理可能不一样。 用实例解释。
+		b. 对错误的危险性进行推断是不直观的。
+		c. 错误处理的方式有很多，并且没有对这些方法进行完整的总结。 EH is diverse and there is no single comprehensive list of EH techniques.
+		d. 识别EH。
+		简而言之，技术挑战。
+		i. There are no clear patternsto identify errors, their handlers, terminating functions, andwrappers of such functions in the kernel.
+		ii.  It is not clear yet what factors constitute thecontexts for EH, and how the contexts should be modeled andincorporated to determine error severity.
+
+	本文的工作如下。
+	1. 首先研究Linux kernel的EEH问题。 收集并分析239 EEH bugs实例，手动识别错误，EH机制，基于这些结果分配危险级别。 解释这些EEH bugs的修复方式。
+	2. 通过总结研究的规则，开发了EECATCH。 
+		a. 自动化识别错误和EH机制。
+		b. 建立error的二维上下文, 包含合适的空间和时间上下文信息。
+		c. 基于识别的errors, EH机制和上下文，用上下文信息自动化推断error的危险级别。
+		d. 通过识别已部署的EH的危险级别 并且 与推断的危险级别相比较，检测EEH bugs.
+		注:对于上下文感知检测，使用  inter-procedural, flow-, context-, field-sensitive 静态分析。 应用概率方式去检测漏洞[1]。
+	3. 使用LLVM[2]实现 EECATCH。将其应用于 latest stable version of the Linux kernel 来评估其有效性和规模性。 说下运行时间和成果。 crash process, crash kernel。
+	本文贡献如下。
+	1. EEH的首次研究。 介绍EEH概念。 对EEH bugs深度调研 原因和影响。 基于危险级别对EH分类。
+	2. EEH的上下文感知检测。 提出一种上下文感知的EEH bugs检测方法。 通过建模并抽取空间和时间的上下文的方式，自动化利用上下文推断error的危险级别。 自动化危险变量溯源。 基于模式自动化识别EH functions.
+	3. 开源工具以及bug成果。
+
+#### Evaluation
+#### reference
+- [1] Dawson Engler, David Yu Chen, Seth Hallem, Andy Chou, and Benjamin Chelf.2001.  Bugs As Deviant Behavior: A General Approach to Inferring Errors inSystems Code.SIGOPS Oper. Syst. Rev.35, 5 (Oct. 2001), 57–72.   https://doi.org/10.1145/502059.502041 : 应用概率方式去检测漏洞. 
+- [2] Chris Lattner and Vikram Adve. 2004.  LLVM: A Compilation Framework for Lifelong Program Analysis & Transformation. InProceedings of the InternationalSymposium on Code Generation and Optimization: Feedback-directed and Runtime Optimization (CGO ’04). IEEE Computer Society, 75–
+	
 -------------------------------------------------------------------------------------------------------
 
 ## authentication and authorisation
@@ -240,3 +458,16 @@
 - word2vec模型将程序切片转换成向量表示。
 - PDG ： program dependency graph.
 - 高质量的漏洞数据集是应用深度学习实现漏洞检测的关键.在软件漏洞领域,尚未形成标准的漏洞数据集,研究者通常需要自己去构造数据集.有部分研究者公开自己的数据集。
+
+## todo
+- 写论文
+	- 论文introduction中最好讲解 a. 背景知识。 b. 一个跟idea相关的例子 c. 重要性，它的作用。 d. 挑战性。 e. 本文工作。
+	- 论文需要discussion(局限性和未来工作), 相关工作章节。
+	**details**
+	- 对于代码片段，需要在图中能够表达 主题 - 注释，以及箭头标记等。
+	- 贡献要简要且全面地概括自己的工作。
+	- 介绍的首段需要多一点引用。
+	- 论文编写尽可能用 latex。
+- 写extra
+- 学习
+- 漏洞挖掘：1. 历史漏洞。 2. 搜索关键函数。 3. 从功能看源码。

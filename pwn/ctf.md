@@ -1,3 +1,4 @@
+# ctf
 ## py  
 - p.interactive() 接下来自动交互。  
 - context.arch = ''; flat([]); // no p32 p64 + for payload.  
@@ -9,15 +10,20 @@
 - recv(byte_num)
 - recvuntil(str)
 - p = process(["/path/to/ld.so", "./test"], env={"LD_PRELOAD":"/path/to/libc.so.6"}) : 本地运行
+- b64e/b64d(str)  : base64加解密。
 
 ### python3
-	bytes2str: bytes.decode(bytes, encoding='iso8859-1')
+	bytes2str: bytes.decode(bytes, encoding='iso8859-1') or b''
 
 ---
-## 基础知识  
+## base  
 - x86 按字节编制，字节序：低字节放低地址   
 - 随机数（伪随机数)利用： seed不变,随机数序列不变。    
 - dll = ctypes.cdll.LoadLibrary() 引用动态库。  
+
+## ELF
+	ELF程序的调用流程：
+	首先是_start函数，调用libc_start_main，再调用libc_csu_init，而__libc_csu_init循环调用_frame_dummy_init_array_entry[]里面的函数指针。
 
 ## IDA
 - LOBYTE() 取最低的一字节。
@@ -30,11 +36,12 @@
 	* canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
 	* PIE:地址随机化, data,code段都会变。 
 		* vsyscall段的地址不会变，可以将这个段dump出来，用ida分析，查看有哪些vsyscall。使用vsyscall必须从函数开头执行，这是因为vsyscall执行时会进行检查，如果不是函数开头执行的话就会出错。
-	* RELRO: 重定位只读，保护库函数的调用不受攻击者重定向  
+	* RELRO: 重定位只读，保护库函数的调用不受攻击者重定向。 对于libc依然有用。
  		* disabled got和plt都可写，fini_array也可写
  		* partial(默认) got表可写，考虑劫持got表
  		* fulled    load time的时候全部函数地址已经解析完成，不可写
-	* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space
+	* ASLR 每次执行时，stack,heap,libc的位置不一样，但是code段不变. 本地调试可关闭ASLR,cat /proc/sys/kernel/randomize_va_space。 
+		* 测试： 对同一个地址泄露两次，看是否是一样的。
 
 ## ncat
 	让程序运行在指定端口上。
@@ -47,6 +54,9 @@
 
 ## seccomp
 	沙箱保护，只有在白名单中的系统调用可以使用。
+	解决办法： 使用 orw 解决。
+### 查询沙箱规则
+	seccomp-tools dump binary : 可以看到禁用的系统调用。
 ### 绕过
 	orw -> open read write.
 
@@ -54,7 +64,11 @@
 - strings -t x 可以查看在文件中字符串的0x偏移量  
 - libc 中 /bin/sh 是一个字符串，next(libc.search('/bin/sh')) / libc.search('/bin/sh').next()  / list(libc.search(b'/bin/sh'))[0]
 - readelf -s  查找elf中的符号表。 .dynsym(运行时所需)   .symtab(编译时所需符号信息)  
-- readelf -S 查看section header的information.  
+- readelf -S 查看section header的information. 
+- ida 打开二进制，计算偏移量。
+
+## capstone
+	二进制反汇编接口。
 
 ## pwntools    
 	elf模块： 静态加载ELF文件  
@@ -70,13 +84,18 @@
     
 	可执行文件往往是第一个被加载的文件，它可以选择一个固定空间的地址，比如Linux下一般都是0x0804000,windows下一般都是0x0040000  
 	共享的指令可以使用地址无关代码技术(PIC)，装载地址不变，跟地址相关部分放到数据段里面。  
+### func
+- shoutdown(direction = "send") : 可以关闭输出流，让read函数返回0字节。
+- shutdown('write') ： 关闭输入流。
+- disasm(bytes) : 反汇编二进制指令流。 基于capstone实现的。
+- asm(shellcode_str, arch='', os='linux')
     
 ## linux 延迟绑定PLT  
 	动态链接器需要某个函数来完成地址绑定工作，这个函数至少要知道这个地址绑定发生在哪个模块 哪个函数，如lookup(module,function)。  
     
 	在glibc中，lookup的函数真名叫做_dl_runtime_reolve(link_map,rel_offset)  
     
-	.plt段是可执行可读的。
+	.plt段是可执行可读的, 是一个代码块。
 	当我们调用某个外部模块时，调用函数并不直接通过GOT跳转，而是通过一个叫做PLT项的结构来进行跳转，每个外部函数在PLT中都有一个相应的项，比如bar()函数在PLT中的项地址叫做bar@plt，具体实现
 ```  
 bar@plt：  
@@ -119,7 +138,11 @@ char *sym_name = STRTAB + sym_entry->st_name;
 ```
 	一旦bar（）解析完毕，再次调用bar@plt时，直接就能跳转到bar()的真实地址。  
     
-	PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。 
+	PLT的真正实现要更复杂些，ELF将GOT拆分成两个表.got和".got.plt",前者用来保存全局变量引用的地址，后者用来保存函数引用的地址。
+### got表
+- 使用pwndbg的got命令。
+- 看二进制.plt段中的got表地址。 
+ 
 ### reference
 - https://evilpan.com/2018/04/09/about-got-plt/#%E5%A4%A7%E5%B1%80%E8%A7%82 : 深入了解动态链接 
           
@@ -149,8 +172,10 @@ char *sym_name = STRTAB + sym_entry->st_name;
 ---
 ## one-gadget in glibc
 	one-gadget 是glibc里调用execve('/bin/sh', NULL, NULL)的一段非常有用的gadget, 但是需要满足约束条件。
+	或者
+	用ida打开libc，寻找/bin/sh和execvpe.
 ### install
-	1. ruby install one_gadget
+	1. gem install one_gadget
 	OR
 	2. pip3 install one_gadget
 ```py
@@ -251,10 +276,13 @@ obj.dump("__libc_start_main_ret")
         cat list
     3. # 下载列表中的版本
         ./download_old 2.24-3ubuntu2.2_amd64（与列表中名称一致）
-        
+
+## heap
+	对于非菜单题，需要抽象出 add, free, show ,edit等函数。        
     
 ## shellcode: 填入某个位置充当指令。  
-- https://www.exploit-db.com/shellcodes  
+- https://www.exploit-db.com/shellcodes : shellcode网站，有各种长度的，另外还有汇编源码以及编译方式。  注： 可能多了一个\x2f（斜杠）.
+![](image/x86_64_shellcode.jpg "")
 - pwntools  asm(shellcraft.sh())  
 - asm(shellcraft.linux.sh()) getshell 注：shellcraft.linux.sh()是getshell的汇编指令,asm进行汇编，返回字符串。  
          
@@ -269,10 +297,12 @@ obj.dump("__libc_start_main_ret")
 - execveat(dirfd, pathname, argv[], envp[], flags)
    execve ，由于缺少 gadget 或其他限制，执行起来总是很艰难的时候：
    让 pathname 指向 "/bin/sh"， 并将 argv, envp 和 flags 设置为 0， 那么无论 dirfd 的值是多少，我们仍然可以得到一个 shell。
+- snprintf(str, size, format, ...) : 从字符串中拷贝size－1个字符到目标串中，然后再在size字节处加一个0。
 - libc版本猜测
 	出题起docker一般都是最新小版本的libc,除非出题人恶心你。
 	- double free
 		若free(0),free(0)爆fastbin attack错误, 则是2.23版本的libc。通过泄露libc地址，比对后12位地址判断版本。若未报错，大概率是2.27版本的libc。
+		在远程的double free错误输出中，利用libcsearcher查找对应libc版本。
 	- strings elf|grep GCC
 		会显示ubuntu版本号，仅供参考。
 		- 16.04 2.23  目前最新11.2
@@ -280,9 +310,20 @@ obj.dump("__libc_start_main_ret")
 		- 19.04 2.29
 		- 19.10 2.30
 		- 20.04 2.31
-- 栈地址泄露
+- 信息泄露
+	- 栈地址泄露
 	libc中有一个叫 environ 的 symbol ，他的值与 main 函数的第三个参数 char ** envp 相同, 就是栈上地址。
 	gdb: 使用p/x &environ 或 libc_elf.symbols['environ'] 获取地址。
+	- 内容泄露
+	两个字符串在内存中紧挨，可以通过printf打印。
+- 注意复用栈上数据或者寄存器数据。 例如复用寄存器作为参数。
+- 若未开PIE, 数据段(.data, .bss) 上存有 stdout, stdin, strerr, 可以复用。
+- 控制程序流，多调用几次相同函数，有意想不到的结果 (multi-staged exploit)。
+- 错误码可以去 /usr/include 下搜索。
+- 流关闭一次后就再也无法重新打开了。 close输入流后，可以使用pipe进行输入。
+- 若无法使用打印flag的函数，则需要爆破
+	- 可以使用shellcode来比较字符进而爆破flag ： 参考 2020蓝帽杯线下赛 slient
+
 ### refrence
 - https://www.cnblogs.com/crybaby/p/13294562.html#%E6%B3%84%E9%9C%B2%E6%A0%88%E5%9C%B0%E5%9D%80 : tips
 ## model

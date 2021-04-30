@@ -30,7 +30,26 @@
 - set -/+x: 开启/关闭详细的日志输出(xtrace).
 
 ### printf
-  打印格式化字符串。
+	打印格式化字符串。
+
+### time
+	计算命令执行时间。
+
+### lsof 
+- 通过某个进程号显示该进行打开的文件 : lsof -p process_number 
+
+### setsid PROG ARGS
+	Run PROG in a new session. 
+
+### grep
+- grep -r "str" --exclude-dir={xxxx} . : 在某个目录递归搜索，但是排除xxxx目录。
+
+### awk
+- awk '{print $1}'
+
+### cut
+
+
 ---
 ## bash
 ### envirenment variable
@@ -42,4 +61,8 @@
 - $@/$* : 传入脚本的所有参数
 - $# : 传入脚本的参数个数
 - $(()) : 进行数字运算
+- getopt : 不仅支持短参-s，还支持–longopt的长参数，甚至支持-longopt的简化参数。相较于getopts ，getopts 不但支持长短选项，其还支持选项和参数放在一起写。
+	- -a : 使getopt长参数支持”-“符号打头，必须与-l同时使用
+	- -l : 后面接getopt支持长参数列表
+	- -o：后面接短参数列表，这种用法与getopts类似
 ---

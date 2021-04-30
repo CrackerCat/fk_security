@@ -14,6 +14,22 @@
 			1. 判断__malloc_hook钩子。
 			2. 寻找一个arena来试图分配内存。
 			3. 调用_int_malloc 函数去申请对应的内存。
+				version = 2.23
+				a. 将用户的需求转化为实际分配的chunk大小。
+				b. 若chunk_size <= max_fast？
+					* 是则尝试 fastbin。 从中找用户需要的chunk。
+				c. 尝试 smallbin, 判断 chunk_size <= 1024B?
+					* 是，查找用户所需的chunk。
+				d. 以上都不满足，说明需要一块大的内存。这里需要合并相邻的fastbin，并放入unsortedbin。
+				e. 遍历 unsortedbin.
+					* 若chunk.bck == unsorted_chunks (av), 大小属于smallbin的范围，这个chunk是last_remainder 并且 chunk的大小大于要分配的大小。
+						* 满足这个条件，直接切割此chunk。 (实际测试，chunk>用户需求就切割....)
+					* 如果chunk大小刚好与用户需要的一样，则返回它。 否则，根据chunk的大小放入smallbin，largebin中，直到找到合适的chunk。
+				f. 遍历完成之后, 进入 large_bin 分配规则。
+					* 按照 smallest-first, best-fit 原则，找到合适的chunk。
+				g. 若fastbin, bins都不满足。
+					* 判断 当前 top chunk 是否满足用户需求。满足则从 top chunk 中划分合适的chunk，否则，主分配区调用sbrk()/mmap以增大top_chunk的大小 (是否大于mmap的阈值); 非主分配区 调用mmap来分配新的sub_heap，增加top_chunk的大小。 （init时, 第一次生成heap空间，是用mmap)
+				总结：
 				* 它根据用户申请的内存块大小以及相应大小 chunk 通常使用的频度（fastbin chunk, small chunk, large chunk），依次实现了不同的分配方法。
 				* 它由小到大依次检查不同的 bin 中是否有相应的空闲块可以满足用户请求的内存。
 				* 当所有的空闲 chunk 都无法满足时，它会考虑 top chunk。
@@ -27,6 +43,17 @@
 			7. 最后返回内存。
 ### fastbin malloc
 	申请的大小需跟fastbin中的堆块的大小是一致的，即fastbin index得一致，比如0x77和0x70是一致的，否则报错。
+```
+// get index
+#define fastbin_index(sz) \
+  ((((unsigned int) (sz)) >> (SIZE_SZ == 8 ? 4 : 3)) - 2)
+// get pos
+#define fastbin(ar_ptr, idx) ((ar_ptr)->fastbinsY[idx])
+//arena所对应的malloc_state中fastbins数组相关的定义
+mfastbinptr fastbinsY[NFASTBINS]
+
+#define NFASTBINS  (fastbin_index (request2size (MAX_FAST_SIZE)) + 1)
+```
 ### unsorted malloc
 ```
         while ((victim = unsorted_chunks(av)->bk) != unsorted_chunks(av)) {
@@ -57,7 +84,7 @@
 	从上述unsoredbin malloc代码可以得知：
 		1. 首先检查unsortedbin的bk字段(victim)是否指向自身，即检查是否为空。
 		2. 检查victim的大小是否满足.(2*SIZE_SZ, av->system_mem]
-		3. 检查大小是否符合smallbin,最后一个chunk的前一个chunk是否是unsortedbin，victim是否是av->last_remainder, size是否合法，则走另一个流程。
+		3. 检查大小是否符合smallbin,最后一个chunk的前一个chunk是否是unsortedbin，victim是否是av->last_remainder, chunk的size是否大于用户的正常的请求大小，则走另一个流程。
 		4. remove最后一个chunk。
 ### smallbin malloc
 ```
@@ -126,6 +153,35 @@
 		4. 检查tcache是否为空指针 并且 idx是不是小于mp_.tcache.bins。
 		5. 检查相应idx的tcache是否满 并且 最后一个元素是否是smallbin, 条件满足则全放入tcache。
 		6. 返回指针。
+### largebin malloc
+	当 fast bin、small bin 中的 chunk 都不能满足用户请求 chunk 大小时，就会考虑是不是 large bin。但是，其实在 large bin 中并没有直接去扫描对应 bin 中的 chunk，而是先利用 malloc_consolidate（参见 malloc_state 相关函数） 函数处理 fast bin 中的 chunk，将有可能能够合并的 chunk 先进行合并后放到 unsorted bin 中，不能够合并的就直接放到 unsorted bin 中，然后再在下面的大循环中进行相应的处理。
+	注: 这是 ptmalloc 的机制，它会在分配 large chunk 之前对堆中碎片 chunk 进行合并，以便减少堆中的碎片。
+```
+    /*
+       If this is a large request, consolidate fastbins before continuing.
+       While it might look excessive to kill all fastbins before
+       even seeing if there is space available, this avoids
+       fragmentation problems normally associated with fastbins.
+       Also, in practice, programs tend to have runs of either small or
+       large requests, but less often mixtures, so consolidation is not
+       invoked all that often in most programs. And the programs that
+       it is called frequently in otherwise tend to fragment.
+     */
+
+    else {
+        // 获取large bin的下标。
+        idx = largebin_index(nb);
+        // 如果存在fastbin的话，会处理 fastbin
+        if (have_fastchunks(av)) malloc_consolidate(av);
+    }
+```
+#### 大循环 - 遍历 unsorted bin
+	1. 按照 FIFO 的方式逐个将 unsorted bin 中的 chunk 取出来
+		1.1 当用户请求的一个 small chunk 并且最后剩余块是 unsorted bin 里唯一的块时，最后剩余块会分裂成两块，用户块会返回给用户同时剩余的那个块会添加到 unsorted bin。此外，它还会成为新的一个最后剩余块。
+		1.2 从unsortedbin中移除该chunk。
+		1.3 若chunk大小和申请大小相同，返回该chunk。
+		1.3 如果chunk大小和申请大小不相同的话，放到对应的 bin 中(smallbin or largebin)。
+	2. 尝试从 large bin 中分配用户所需的内存。根据大小进行分配，要么全分配要么split。
 ---
   
 ## calloc  
@@ -160,7 +216,22 @@ BK = P->bk
 FD->bk =BK
 BK->fd =FD
 ```
-
+### free的具体步骤
+	version = 2.23。 具体步骤如下。
+	a. 判断指针是否为空。
+	b. 判断所需的chunk是否是mmaped chunk.
+		* 是，munmap() 释放。
+	c. 判断chunk的位置和大小。
+		* 是否属于fastbin的范畴。 是则放入。 
+	d. 属于 unsortedbin的范畴。 判断前一个chunk是否空闲。
+		* 是，合并。
+		* 不是，判断当前chunk的下一个是不是top。
+			* 是，和topchunk合并。
+			* 否，则判断下一个chunk是否空闲。 若空闲则合并，并放入unsortedbin。
+	e. 合并放入unsortedbin中之后，判断 chunk > FASTBIN_CONSOLIDATION_THRESHOLD（默认64KB/128KB)
+		* 是，触发fastbin合并，放入unsortedbin。
+	f. 判断top是否大于mmap的收缩阈值（默认128KB)
+		* 是： 主分配区，回归还一部分给OS; 非主分配区，收缩sub_heap。
 ### glibc-2.23以下的free的实现  
 ```
 void weak_variable (*__free_hook) (void *__ptr, const void *) = NULL; //glibc中全局变量
@@ -191,8 +262,9 @@ if (__builtin_expect (FD->bk != P || BK->fd != P, 0))                      \
 ```
 
   绕过思路一：
-    1. 程序中存在一个全局变量,其地址是ptr,ptr指向伪造的chunk的地址, 即*ptr=P。
+    1. 程序中存在一个全局变量,其地址是ptr,ptr指向伪造的chunk的地址, 即*ptr=P。 或未开PIE。
     2. *ptr指向的堆内存可由用户控制。
+    3. got表可写。
   若具备以上条件，攻击者可伪造一个空闲chunk以满足这个安全机制，其中fd=ptr - size(ptr)*3, bk=ptr - size(ptr)*2。
 ```math
 P->fd->bk=*(ptr - size(ptr)*3 + size(ptr)*3) = *ptr = P
@@ -224,7 +296,6 @@ P->bk->fd=*(ptr - size(ptr)*2 + size(ptr)*2) = *ptr = P
 
 ---   
 ## 堆相关的数据结构  
-    
 ### malloc_chunk  
 堆申请的内存为chunk。这块内存在 ptmalloc 内部用 malloc_chunk 结构体来表示。无论一个 chunk 的大小如何，处于分配状态还是释放状态，它们都使用一个统一的结构。  
 ```    
@@ -297,7 +368,8 @@ MALLOC_ALIGNMENT. */
 
 ### malloc_state  
 	该结构用于管理堆，记录每个 arena 当前申请的内存的具体状态。  
-	无论是 thread arena 还是 main arena，它们都只有一个 malloc state 结构。由于 thread 的 arena 可能有多个，malloc state 结构会在最新申请的 arena 中。  
+	程序可能只是向操作系统申请很小的内存，但是为了方便，操作系统会把很大的内存分配给程序。这样的话，就避免了多次内核态与用户态的切换，提高了程序的效率。我们称这一块连续的内存区域为 arena。此外，我们称由主线程申请的内存为 main_arena。
+	无论是 thread arena 还是 main arena，它们都只有一个 malloc state 结构。由于 thread 的 arena 可能有多个，malloc state 结构会在最新申请的 arena 中。 主分配区与非主分配区按环形链表的方式进行管理。 非主分区只能使用进程的mmap映射区域。
 	注意，main arena 的 malloc_state 并不是 heap segment 的一部分，而是一个全局变量，存储在 libc.so 的数据段。
 ```c  
 struct malloc_state {  
@@ -332,6 +404,60 @@ INTERNAL_SIZE_T system_mem;
 INTERNAL_SIZE_T max_system_mem;  
 }；
 ```
+#### malloc_state 相关函数
+##### malloc_init_state
+```
+/*
+   Initialize a malloc_state struct.
+   This is called only from within malloc_consolidate, which needs
+   be called in the same contexts anyway.  It is never called directly
+   outside of malloc_consolidate because some optimizing compilers try
+   to inline it at all call points, which turns out not to be an
+   optimization at all. (Inlining it in malloc_consolidate is fine though.)
+ */
+
+static void malloc_init_state(mstate av) {
+    int     i;
+    mbinptr bin;
+
+    /* Establish circular links for normal bins */
+    for (i = 1; i < NBINS; ++i) {
+        bin     = bin_at(av, i);
+        bin->fd = bin->bk = bin;
+    }
+
+#if MORECORE_CONTIGUOUS
+    if (av != &main_arena)
+#endif
+        set_noncontiguous(av);
+    if (av == &main_arena) set_max_fast(DEFAULT_MXFAST);
+    // 设置 flags 标记目前没有fast chunk
+    av->flags |= FASTCHUNKS_BIT;
+    // 就是 unsorted bin
+    av->top = initial_top(av);
+}
+```
+##### malloc_consolidate
+	该函数主要有两个功能:
+	1. 若 fastbin 未初始化，即 global_max_fast 为 0，那就初始化 malloc_state。
+		1.1 
+```
+  } else {
+        malloc_init_state(av);
+        // 在非调试情况下没有什么用，在调试情况下，做一些检测。
+        check_malloc_state(av);
+    }
+```
+	2. 如果已经初始化的话，就合并 fastbin 中的 chunk。 
+		2.1 按照 fd 顺序遍历 fastbin 的每一个 bin，将 bin 中的每一个 chunk 合并掉。
+
+	具体工作步骤如下：
+	1. 判断fastbin是否初始化，如果未初始化，则进行初始化然后退出。
+	2. 按照fastbin由小到大的顺序（0x20 ,0x30 ,0x40这个顺序）合并chunk，每种相同大小的fastbin中chunk的处理顺序是从fastbin->fd开始取，下一个处理的是p->fd，依次类推。
+	3. 首先尝试合并pre_chunk。
+	4. 然后尝试合并next_chunk：如果next_chunk是top_chunk，则直接合并到top_chunk，然后进行第六步；如果5. next_chunk不是top_chunk，尝试合并。
+	5. 将处理完的chunk插入到unsorted bin头部。
+	6. 获取下一个空闲的fastbin，回到第二步，直到清空所有fastbin中的chunk，然后退出。
 
 ## bin  
 	ptmallocc对空闲的chunk进行管理。根据空闲的chunk的大小以及使用状态分成四类，fast bins,small bins,large bins, unsorted bins.  
@@ -420,8 +546,14 @@ tcache_put (mchunkptr chunk, size_t tc_idx)
 ### large bin  
 	large bins 中一共包括 63 个 bin。每个 bin 中的 chunk 的大小不一致，而是处于一定区间范围内，其中的chunk 按 fd 指针的顺序从大到小排列。相同大小的chunk同样按照最近使用顺序排列。这 63 个 bin 被分成了 6 组，每组 bin 中的 chunk 大小之间的公差一致。 
 ### unsorted bin  
-	unsorted bin 可以视为空闲 chunk 回归其所属 bin 之前的缓冲区。它只有一个链表，处于bin数组下标1处。进行内存分配查找时先在fastbins，small bins中查找，之后会在unsorted bin中进行查找。如果取出来的 chunk 大小刚好满足，就会直接返回给用户，否则整理unsorted bin中所有的chunk到bins中对应的bin中。  
+	unsorted bin 可以视为空闲 chunk 回归其所属 bin 之前的缓冲区。它只有一个链表，处于bin数组下标1处。进行内存分配查找时先在fastbins，small bins中查找，之后会在unsorted bin中进行查找。 ***如果取出来的 chunk 大小刚好满足，就会直接返回给用户*** ，否则整理unsorted bin中所有的chunk到bins中对应的bin中。
+	* 如果unsorted bins上只有一个chunk并且大于待分配的chunk，则进行切割，并且剩余的chunk继续扔回unsorted bins；
+	* 如果unsorted bins上有大小和待分配chunk相等的，则返回，并从unsorted bins删除；
+	* 如果unsorted bins中的某一chunk大小 属于small bins的范围，则放入small bins的头部；
+	* 如果unsorted bins中的某一chunk大小 属于large bins的范围，则找到合适的位置放入。若未分配成功，转入下一步
+	  
 	在头部插入新的节点。使用过程中，遍历顺序是FIFO。  
+
 	unsorted bin 中的空闲 chunk 处于乱序状态，主要有两个来源:  
 	1. 当一个较大的 chunk 被分割成两半后，如果剩下的部分大于 MINSIZE，就会被放到 unsorted bin 中。  
 	2. 释放一个不属于 fast bin 的 chunk，并且该 chunk 不和 top chunk 紧邻时，该 chunk 会被首先放到 unsorted bin 中; 如果该chunk和 top chunk紧邻时，它会和top chunk 合并。
@@ -449,13 +581,7 @@ tcache_put (mchunkptr chunk, size_t tc_idx)
 ## chunk extend and overlapping(malloc)  
 	ptmalloc 通过 chunk header 的数据判断 chunk 的使用情况和对 chunk 的前后块进行定位.chunk extend 就是通过*控制 size 和 pre_size 域*来实现跨越块操作从而导致 overlapping 的。  类似也有 chunk shrink.  
 	可以控制 chunk 中的内容。如果 chunk 存在字符串指针、函数指针等，就可以利用这些指针来进行信息泄漏和控制执行流程。  
-	- 对inuse fastbin 进行extend  
-	ptmalloc 通过 chunk header 的数据判断 chunk 的使用情况和对 chunk 的前后块进行定位.chunk extend 就是通过*控制 size 和 pre_size 域*来实现跨越块操作从而导致 overlapping 的。  类似也有 chunk shrink.  
-	可以控制 chunk 中的内容。如果 chunk 存在字符串指针、函数指针等，就可以利用这些指针来进行信息泄漏和控制执行流程。  
-	- 对inuse fastbin 进行extend  
-	可以控制 chunk 中的内容。如果 chunk 存在字符串指针、函数指针等，就可以利用这些指针来进行信息泄漏和控制执行流程。  
-
-	- 对inuse fastbin 进行extend
+- 对inuse fastbin 进行extend    
 ```c  
 int main(void)  
 {  
@@ -500,11 +626,8 @@ ptr1=malloc(0xa0);
 ```
 
 - 通过extend 前向overlapping  
-通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
-前向 extend 利用了 smallbin 的 unlink 机制，通过修改 pre_size 域可以跨越多个 chunk 进行合并实现 overlapping。  
-
-- 通过extend 前向overlapping  
-通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
+	通过修改 pre_inuse 域和 pre_size 域实现合并前面的块.  
+	前向 extend 利用了 smallbin 的 unlink 机制，通过修改 pre_size 域可以跨越多个 chunk 进行合并实现 overlapping。   
 ```
 int main(void)  
 {  
@@ -522,13 +645,19 @@ malloc(0x150);//占位块
 free(ptr4);//unlink进行前向extend  
 }  
 ```
-
-## exploitation
-- 堆中存有地址，可以覆盖成我们想要的地址，泄露信息。 e.g. babyfengshui
+### exploitation
+	- off by one: 可以overlopping. eg unsortedbin. 修改 prevsize 和 iuse位，然后free-> merge -> overlap. 往往对 unsortedbin 和 largebin 起作用，因为没有对size域的检查。
+		- 增大size域。 
+			假定 ver<=2.26（方法是通用的）, V-A-T 三个连续chunk，V有off-by-one漏洞，T是目标chunk，A不属于fastbin的范畴。 攻击流程是 free(A) -> 触发V的off-by-one 以增大 A 的size -> 分配 B chunk 以 重叠 A和T -> 修改B从而change T 的内容。
+		- 缩小size域。
+			与 增大的场景 类似。
+		- 非邻近chunk合并->重叠
+			假定 ver<=2.26（方法是通用的）, V-A-T-B 四个连续的chunk，V具有off-by-one漏洞，T是目标chunk，B不属于fastbin的范畴。 攻击流程是 free(B) ->  触发V的off-by-one 以增大 A 的size（=A+T) -> free(A) -> merge(A,T,B) -> 分配 C chunk 以重叠A和T -> 修改C从而change T 的内容
+	- uaf : 也可以overlapping.
 
 ## 保护机制
 ### Safe Linking
-  2.32中引入的新的保护机制。也可以参考[聊聊glibc 2.32 malloc新增的保護機制-Safe Linking](https://publicki.top/2020/08/25/SoSafeMinePool/[https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773](https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773 "libc.2.32")
+  对于 tcache, 2.32中引入的新的保护机制。也可以参考[聊聊glibc 2.32 malloc新增的保護機制-Safe Linking](https://publicki.top/2020/08/25/SoSafeMinePool/[https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773](https://medium.com/@ktecv2000/%E8%81%8A%E8%81%8Aglibc-2-32-malloc%E6%96%B0%E5%A2%9E%E7%9A%84%E4%BF%9D%E8%AD%B7%E6%A9%9F%E5%88%B6-safe-linking-9fb763466773 "libc.2.32")
 ```c
 /* Caller must ensure that we know tc_idx is valid and there's room
    for more chunks.  */
@@ -559,8 +688,18 @@ tcache_get (size_t tc_idx)
   e->key = NULL;
   return (void *) e;
 }
+
+#define PROTECT_PTR(pos, ptr)
+  ((__typeof (ptr)) ((((size_t) pos) >> 12) ^ ((size_t) ptr)))
+
+#define REVEAL_PTR(ptr)
+    PROTECT_PTR (&ptr, ptr)
+
 // 参考https://publicki.top/2020/08/25/SoSafeMinePool/#more
 ```
+	对 next 域进行了保护。
+##### bypass
+	需要去知道一个堆地址才可以。
 
 ---
 
@@ -645,15 +784,33 @@ errout:
  
 ## unsortedbin attack
 	释放离散的chunk，才会在unsortedbin中。
+    
 ### exploitation
 	1. 创建chunk0, 大小保证free后能够放进unsortedbin,紧接着创建chunk1。
-	2. free(chunk0), 此时chunk0的fd,bk都指向unsortedbin。
+	2. free(chunk0), 此时chunk0的fd,bk都指向unsortedbin，即main_arena+88(这里存着chunk0.fd的地址)。
 		若存在堆溢出或uaf，能够修改chunk0的bk。
-		a. 那么我们将bk修改为target_addr - sizeof(ptr)*2。
-		b. 我们再申请一个和chunk0相同大小的空间，目标地址(bk)就会写入unsortedbin的地址，即达到写任意地址的目的，但修改的值不受我们可控，唯一可以知道得是，这个值很大。
+		a. 那么我们将bk修改为target_addr - sizeof(ptr)*2。 
+		b. 我们再申请一个和chunk0相同大小的空间chunk1，目标地址(bk)就会写入unsortedbin的地址，即达到写任意地址的目的，但修改的值不受我们可控，唯一可以知道得是，这个值很大。
+		注: 若chunk1 和 chunk0 的大小不一样，会调用malloc_printerr报错，但是修改值成功，触发fsop！ 原因待研究？？
 ### summary
 	1. 通过这种攻击修改循环的次数来使得程序可以执行多次循环。	
 	2. 修改 heap 中的 global_max_fast 来使得更大的 chunk 可以被视为 fast bin，这样我们就可以去执行一些 fast bin attack了。
+#### 利用global_max_fast进行相关的攻击
+	如果可以改写global_max_fast为一个较大的值，然后释放一个较大的堆块时，由于fastbins数组空间是有限的，其相对偏移将会往后覆盖，如果释放堆块的size可控，就可实现往fastbins数组（main_arena）后的任意地址写入所堆块的地址。
+	理论上来说只要是main_arena结构体后面的是函数指针或是结构体指针的地址都可以，目前很容易能够预想到的是：
+	a. _IO_list_all
+	b. stdout
+	c. stdin
+	d. stderr
+	e. __free_hook
+	
+	解决方案：
+	1. 复写前面四个就是使用IO_file攻击那一套方法，伪造结构体来实现任意读任意写或者伪造vtable来实现house of orange攻击。
+	2. 复写__free_hook的话则需要一次uaf来修改释放进去的fd改成system或者one gadget，再将堆块申请出来，从而实现将__free_hook改写成system或者one gadget。
+#### leak libc
+	1. 生成一个unsortedbin，想办法打印。
+		1. 对unsoredbin 进行打印。
+		2. 从unsortedbin中分割一个chunk，然后进行打印。
 
 ## Tcache attack
 ### Tcache poisoning
@@ -675,6 +832,7 @@ errout:
 	2. 有double free的情况下，连续free 8次同一个堆块，这里堆块大小，大于fastbin范围。
 	3. 申请大堆块，大于0x410。
 	4. 修改堆上的Tcache管理结构
+	5. 当没有打印函数时，修改IO_2_1_stdout的_IO_write_base，这样，当再次调用puts或printf的时候，就会泄露出_IO_write_base~_IO_write_ptr之间的数据。 _flags需要满足 0xfbad2087 | 0x1000 | 0x800。
 #### Tcache double free
 	* 2.27的环境
 		实现任意地址写。
@@ -740,7 +898,7 @@ _int_free{
 ```
 ##### bypass 思路
 	新增保护主要还是用到e->key这个属性，因此绕过想绕过检测进行double free，这里也是入手点。绕过思路有以下两个：
-	1. 	如果有UAF漏洞或堆溢出，可以修改e->key为空，或者其他非tcache_perthread_struct的地址。这样可以直接绕过_int_free里面第一个if判断。不过如果UAF或堆溢出能直接修改chunk的fd的话，根本就不需要用到double free了。
+	1. 	如果有**UAF漏洞或堆溢出**，可以修改e->key为空，或者其他非tcache_perthread_struct的地址。这样可以直接绕过_int_free里面第一个if判断。不过如果UAF或堆溢出能直接修改chunk的fd的话，根本就不需要用到double free了。
 	2. 	利用堆溢出，修改chunk的size，最差的情况至少要做到off by null。留意到_int_free里面判断当前chunk是否已存在tcache的地方，它是根据chunk的大小去查指定的tcache链，由于我们修改了chunk的size，查找tcache链时并不会找到该chunk，满足free的条件。虽然double free的chunk不在同一个tcache链中，不过不影响我们使用tcache poisoning进行攻击。
 	3. 	绕过tcache double free ，使用 fastbin double free.
 
@@ -788,6 +946,49 @@ tcache_    +------------+<---------------------------+
 ### reference
 - https://www.freebuf.com/articles/system/234219.html : 解释性文章。
 - http://q1iq.top/GeekPwn%E7%83%AD%E8%BA%AB%E8%B5%9B2020-wp/ ： 题
+
+## House of Orange
+	House of Orange 核心就是通过漏洞利用获得 free 的效果。
+	House of Orange 的核心在于在没有 free 函数的情况下得到一个释放的堆块 (unsorted bin)。 这种操作的原理简单来说是当前堆的 top chunk 尺寸不足以满足申请分配的大小的时候，原来的 top chunk 会被释放并被置入 unsorted bin 中，通过这一点可以在没有 free 函数情况下获取到 unsorted bins。
+### 前提
+	1. 需要目标漏洞是堆上的漏洞但是特殊之处在于题目中不存在 free 函数或其他释放堆块的函数。
+### 原因
+	我们假设目前的 top chunk 已经不满足 malloc 的分配需求。 首先我们在程序中的malloc调用会执行到 libc.so 的_int_malloc函数中，在_int_malloc函数中，会依次检验 fastbin、small bins、unsorted bin、large bins 是否可以满足分配要求，因为尺寸问题这些都不符合。接下来_int_malloc函数会试图使用 top chunk，在这里 top chunk 也不能满足分配的要求，因此会执行如下分支。
+```
+/*
+Otherwise, relay to handle system-dependent cases
+*/
+else {
+      void *p = sysmalloc(nb, av);
+      if (p != NULL && __builtin_expect (perturb_byte, 0))
+        alloc_perturb (p, bytes);
+      return p;
+}
+```
+	此时 ptmalloc 已经不能满足用户申请堆内存的操作，需要执行 sysmalloc 来向系统申请更多的空间。 但是对于堆来说有 mmap 和 brk 两种分配方式，我们需要让堆以 brk 的形式拓展，之后原有的 top chunk 会被置于 unsorted bin 中。 要实现 brk 拓展 top chunk，但是要实现这个目的需要绕过一些 libc 中的 check。 首先，malloc 的尺寸不能大于mmp_.mmap_threshold。
+```
+if ((unsigned long)(nb) >= (unsigned long)(mp_.mmap_threshold) && (mp_.n_mmaps < mp_.n_mmaps_max))
+```
+	sysmalloc 函数中存在对 top chunk size 的 check, 如下：
+```
+assert((old_top == initial_top(av) && old_size == 0) ||
+     ((unsigned long) (old_size) >= MINSIZE &&
+      prev_inuse(old_top) &&
+      ((unsigned long)old_end & pagemask) == 0));
+```
+### 利用方式
+	总结一下伪造的 top chunk size 的要求
+	1. 伪造的 size 必须要对齐到内存页, 一般4kb
+	2. size 要大于 MINSIZE(0x10)
+	3. size 要小于之后申请的 chunk size + MINSIZE(0x10)
+	4. size 的 prev inuse 位必须为 1
+	
+	之后原有的 top chunk 就会执行_int_free从而顺利进入 unsorted bin 中。
+	往往是配合fsop一起使用，达到利用的目的。
+
+## OOB
+	1. off-by-one -> 修改size -> chunk 重叠 -> 修改fd/bk
+	2. 多字节 -> 直接修改fd/bk
 
 ## fake chunk
 - hook-19附近有一个size为0x7f的fakechunk.
@@ -880,6 +1081,9 @@ if (width >= WORK_BUFFER_SIZE - EXTSIZ)
 ```
 	大多数时候，触发 malloc 和 free 的最小 width 是 65537。
 ---
+
+### scanf函数的利用
+	When you input a very long string to scanf , it will malloc a buffer to handle it.  当你输入一个很长的字符串，scanf会malloc一个largechunk来处理这个字符串。
 
 ### to-do list
 - https://www.anquanke.com/post/id/222948 : house-of系列
