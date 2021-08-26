@@ -1,13 +1,25 @@
 # vulnerability
+## System hardening
+###  Hiding in the Particles: When Return-Oriented Programming Meets Program Obfuscation
+	It transforms program functions into obfuscated ROP chains that coexist seamlessly with the surrounding software stack and can withstand popular static and dynamic deobfuscation approaches.
+	raindrop takes as input an ELF binary and obfuscates one or more user-defined functions, introducing different ROP-based obfuscations.
 ## vulnerability detection
 	漏洞检测主要分为静态检测和动态检测。
 	* 静态检测
+		核心技术是数据流分析和污点分析。
 		* 源代码漏洞检测
-			主要包括基于中间表示的漏洞检测和基于逻辑推理的漏洞检测.
+			主要包括基于中间表示(AST, CFG, PDG, CPG(包含前三个图))的漏洞检测和基于逻辑推理的漏洞检测.
 			* 基于模式的漏洞检测
 			* 基于代码相似性的漏洞检测
 				核心思想是相似的代码很可能含有相同的漏洞，只需要根据漏洞代码实例就可以检测目标程序中是否含有相同的漏洞。
+			* 基于学习的漏洞检测
+				核心思想是将源代码以数值的形式表示并提交给学习模型，利用学习模型挖掘源代码的深层次表征特征和关联性. 
+				1. 对源代码进行解析或构建程序切片以保留与漏洞检测相关的信息。
+				2. 使用词嵌入等技术将源代码中间表示或切片映射到向量空间。
+				3. 借助机器学习或深度学习模型强大的大数据挖掘能力学习源代码蕴含的各类信息（如：控制依赖和数据依赖信息）。在训练学习模型时，还可以配合使用传统静态分析的方法来获取更为丰富的源代码特征。使用传统静态分析对源代码的显式特征进行挖掘，使用机器学习方法对源代码图结构表示中的隐式特征进行挖掘，将这两种特征相结合，形成互补，为源代码漏洞的发现和挖掘提供更加有效地支撑；
+				4. 实现漏洞检测。
 		* 二进制漏洞检测
+			主要以经过反汇编等手段处理后的二进制代码作为输入，设法恢复程序的信息，运用模式匹配或补丁对比等方式实现漏洞检测.
 			* 二进制程序分析
 			* 基于二进制相似性的漏洞检测
 				*	函数代码特征
@@ -34,16 +46,48 @@
 			* 测试用例选择
 				需要对测试用例进行筛选,选择高质量的测试用例（例如：触发漏洞或到达新路径）,过滤掉无效的测试用例,从而进一步提高测试性能。
 		* 动态符号执行
-			符号执行是一种程序分析技术，可以通过分析程序来得到让特定代码区域执行的输入。
-			把程序的输入变为符号值，那么程序计算的输出值就是关于符号输入值的函数。
-			使用符号值代替具体值执行程序，多款工具应用于漏洞检测，包括KLEE, SAGE等.
+			1. 符号执行是一种程序分析技术，可以通过分析程序来得到让特定代码区域执行的输入。将具体执行和符号执行相结合，以具体的值作为程序的输入，执行程序，收集符号约束，修改收集的符号约束内容以构造不同的可执行路径。
+			2. 把程序的输入变为符号值，那么程序计算的输出值就是关于符号输入值的函数。
+			3. 使用符号值代替具体值执行程序，多款工具应用于漏洞检测，包括KLEE, SAGE等.
 
 			符号执行分析过程：
 				* 符号执行会在全局维护两个变量，符号状态θ，符号化的路径约束PC。
 				* 符号状态θ，记录了程序中每个变量到符号表达式的映射。
 				* 符号化路径约束PC，用来表示路径条件，初始值为true。
 				* θ和PC会在符号执行过程中不断更新，当符号执行结束时，求解PC就可以得到覆盖所有路径的输入。
-			* 约束生成
+				* 约束生成
+### 综述：源代码漏洞静态分析技术
+#### 软件漏洞分析技术基本概念
+#### 源代码漏洞静态分析技术
+##### 源代码的表示方法
+##### 源代码的分析方法
+###### 传统静态分析技术
+###### 基于学习的静态分析技术
+##### 分析与讨论
+	源代码漏洞静态分析时，主要存在以下5个难点：
+	1. 源代码的表示。
+		无论是传统静态分析还是基于学习的静态分析，都需要将源代码转换为某种中间表示。不同的中间表示所包含的源代码信息不同。如何选择和构建合理的源代码中间表示方法以尽可能多地包含源代码信息是当前的一个难点。
+	2. 源代码的建模。
+		由于代码中对内置函数和外部库的引用越来越频繁，各种动态代码引入也越来越常见。
+		i. 如何在缺乏源代码支持的情况下，对内置函数和外部引用库的行为进行建模。
+		ii. 如何对程序的动态行为进行分析。
+		iii. 如何针对大型项目进行高效的过程间分析以保证程序数据流的完整性。
+		iV. 如何自动化地对Source和Sink进行识别和推理，对代码中出现的净化例程进行合理地评估也是具有挑战的。
+	3. 机器学习方法的选择。
+		将机器学习技术引入到静态分析中是当前的研究趋势，但并不是所有的机器学习方法都适用于程序分析。如何选择和构建合理的学习模型来理解和学习源代码表示的信息是基于学习的静态分析的关键问题。
+	4. 漏洞分析方法的普适性。
+		当前的研究大多针对用某一特定类型语言编写的软件程序展开。改善漏洞分析方法的普适性，提高分析模型的适配能力是当前静态分析中的关键问题。
+	5. 数据集的匮乏。
+		如何构建统一规范的数据集，如何在数据稀缺的情况下对漏洞进行有效挖掘是一大难题。
+#### 总结
+	（1）使用直观的图形化结构表示源代码
+	（2）合理的代码嵌入
+	（3）将源代码的显式特征和隐式特征相结合
+	（4）合理、适度地使用深度学习技术
+	（5）从待检测项目中学习[1]。通过从待检测项目中学习，也许能够避免由于数据集稀缺导致模型过拟合的问题，帮助我们在真实场景下构建高性能的检测模型.
+#### reference
+- [1] [79] Ahmadi M, Farkhani R M, Williams R, et al. Finding Bugs Using Your Own Code: Detecting Functionally-similar yet Inconsistent Code[C]//30th {USENIX} Security Symposium ({USENIX} Secu-rity 21). 2021.
+
 ### **Sys:A static/symbolic tool for finding good bugs in good (browser) code.**
 	本文介绍了一个将静态检查和符号执行结合起来的漏洞检测工具Sys。Sys将漏洞检测分为两个步骤：首先利用静态检查将可能出现错误的代码进行标记；然后利用符号执行判断标记的代码是否存在bug。 作者利用Sys对Chrome，Firefox以及FreeBSD进行了测试，总共发现51个bug，其中有43个被确认（并且作者获得了很多奖金）。
 #### Goal
@@ -228,8 +272,17 @@
 ##### 3.2 Approach Overview
 ##### 3.3 Finding Error-Handling Functions and Error Codes
 ##### 3.4 Identifying FH Primitives
+	识别有错误处理原语的基本块。
+	1. 即使有错误码列表，识别返回错误的原语也可能很复杂，并不是函数中使用的所有错误代码都会被返回，值是否为错误代码取决于某些上下文。例如，赋值指令中的NULL仅在赋值以函数的返回值为目标时是错误代码。错误码还可以跨函数传播和更改。为了精确地识别返回错误的原语，需要进行数据流分析来决定返回指令最终是否返回错误代码。我们通过识别内核的每个函数F中的返回指令开始数据流分析。为了确定返回指令的返回值ret是否是错误代码，我们向后分析其传播的值，即ret的所有来源。来源可以是常数、局部变量、全局变量或者参数。如果来源是一个常数错误码，则可以确定包含修改ret值指令的基本块。因为返回值是由最后一次赋值决定的，所以一旦找到源就停止反向数据流分析。在我们的实现中，我们选择不使用别名分析来进行数据流分析，因为错误码传播比较简单，通常不涉及复杂的指向关系。例如，我们没有看到任何错误代码通过一个指针存储到内存中，然后通过另一个指针加载的例子。
+	2. 我们通过识别相应函数的调用实现识别发出错误消息或停止执行的错误处理原语。对于不返回错误代码或调用异常处理函数的即时错误修复情况，通常这种修复仅限于一些简单的场景，比如用旧值或边界值重置变量。因此，如果一个条件语句比较两个变量a和b，并且a = b或b = a出现在条件语句之后的基本块中，我们将其识别为一个即时的错误修复。这样的分析绝不是完整的，但只能涵盖我们在研究中观察到的大多数错误修复情况。
 ##### 3.5 Constructing FH Graph
+	在收集了所有具有错误处理的基本块后，下一步是分析条件语句的分支，看它们是否符合安全检查的定义。为了便于对所有分支的错误处理特性进行分析，我们提出构造错误处理图--带有错误处理特性边的增强控制流图。图6.2就是一个错误处理图例子。图是用迭代算法构造的。最初，所有边都标记为NO-FH，然后算法从函数入口遍历控制流图。当到达一个带有错误处理原语的基本块时，该算法根据以下策略更新前向可达边和后向可达边的属性。
+	①	对于错误修复和异常处理原语，由于它们不传播，我们只更新当前基本块的传入边和传出边的属性。
+	②	对于返回错误代码的原语，由于错误代码传播，我们迭代更新当前基本块所有传入边和传出边的属性。根据安全检查的定义，在分支上合并属性。我们有一个专用的标志来区分错误处理和错误返回。
 ##### 3.6 Identifying Security Checks
+	在错误处理图中，识别安全检查条件语句简化为查询条件语句的输出边的错误处理属性。具有至少一个MUST-FH输出边和至少一个MA Y -FH或NO-FH输出边的条件语句被标识为安全检查。紧接着，检查当前包含安全检查条件语句的函数。
+	
+	thinking: 如果该安全检查条件语句的安全检查失败分支属于Must_Handle_err，异常处理函数属于停止执行类型，并且危险变量来源于形参，那么称当前函数为安全检查函数，将其插入函数列表中。
 #### 4. Detecting Critical Kernel Semantic Bugs ？/存在水分
 ##### 4.1 Detecting Null-Pointer Dereferencing
 	1. 先找到NULL指针的安全检查
@@ -289,9 +342,84 @@
 	从NVD中抽样200个最近的漏洞，分析后得知其中有119(59.5%)个是用安全检查修复的。
 ##### 2.1 Impact of Missing-Check Bugs
 	a. 多少安全漏洞是由安全检查缺失导致的。
-	b. 缺失安全检查导致的漏洞类型。
+		60%。
+	b. 缺失安全检查导致的安全漏洞类型。
+		* DoS 51.2%
+		* Over flow 16%
+		* Bypass privi 14.3%
+		* info leak 11.7%
+		* memory corrupt 6.7%
+		* code exec 3.4%
 	c. 缺失安全检查导致的漏洞影响力。
+		缺失检查的目标是 buffer length (CVE-2017-18017), function return value, pointer value, and permissions。
+		容易造成 buffer overflow, use-after-free, memory corruption, permission pass，which will finally result in data losses, information leaks, and even attackers control of the whole system。
 #### 4 Design of CRIX
+##### 4.1 Identifying Targets of Indirect Calls
+	在编译时期，很难知道非直接调用的有效目标是哪个address-taken functions.
+	比较指针分析和类型分析的利弊。
+	基于类型分析的方法，非直接调用尝试匹配address-taken function的参数个数和类型。若匹配，则是潜在的有效目标。这个方法常用于CFI。
+	现存一种方法[7]，使用 objects of same struct type to restrict indirect-call 目标。 首先收集所有的函数指针，然后利用struct和函数签名匹配 分析indirect-call。
+###### Two-Layer Type Analysis
+	单层类型分析使用函数签名约束非直接调用目标。
+	双层类型分析进一步的使用struct约束非直接调用目标，类似[7]中方法。
+	思路：对于OS kernels, 88%被取过地址的函数首先存放在结构体的函数指针域中，然后解引用调用该函数。因此，未被存放进结构体函数指针域中的函数一定不是结构体中非直接调用的目标函数。12%被取过地址的函数未存储进struct，则使用单层类型分析。
+	分析流程：若对结构体类型a的函数指针域b进行了赋值，那么对a类型结构体的域b进行解引用，有效目标函数是赋值的address-taken function set。
+	结果：大大降低误报率，（猜 高达90%）。
+	技术要求：保证 field-sensitive, 通过分析struct的offset实现。对于offset不确定的场景(union)，使用field-insensitive。
+###### Type-Escaping Analysis for False Negatives
+	类型逃逸分析，即类型混淆分析，降低漏报率。
+	1. 多态场景。例如一个函数指针存储于结构体A，但是结构体B可以指向结构体A的内存空间，并通过结构体B调用函数指针。
+	2. 类型强制转换。pointer -> integer
+	3. 指针传递。pointer -> pointer
+	当找到一个逃逸类型结构体，这个结构体类型的函数指针域仅使用单层类型分析，效率高，防止漏报。
+	为了应对这个局限性，将获得函数地址的结构体进行数据流分析，查看其是否发生过类型转换，或者其函数指针字段是否赋值给其他结构体类型。如果发生类型混淆，则只采用单层类型分析识别非直接调用。
+	a. 目的：获取<<type,index>, func>map。
+	b. 设计思路：在构建(type,function)map的过程中，判断赋值语句前后的变量是否有发生类型混淆。若发生类型混淆，利用llvm的GetElementPtrInst类或LoadInst类的部分接口，提取出变量的上层类型，用混淆变量(赋值变量)更新被混淆变量(被赋值变量)的(type,function)map，避免类型逃逸的发生。
+	c. 实现思路：
+```
+1. 分析初始化语句。 2. 分析赋值语句。 3. 分析类型转换语句。 4. 分析内存拷贝函数。
+		↓					↓					↓				↓
+--A={.func=func}--		--A.func=func--			--typeA = typeB-- 
+		↓					↓							↓
+		-------------→  <<type,index>, func>map  ←-------
+```
+	Map更新条件：
+	i. 初始化语句中，存在此类情况则更新该Map；
+	ii. 赋值(store)语句中：
+		存在形如A.Field = FuncPtr的情况更新Map；
+		存在形如A.FieldA = B.FieldB,且FieldB为函数指针则，将B.FieldB对应的Map合并到A.FieldA的Map中
+	iii. 在调用中，例如A.Field(para1,para2,…)，遍历TransitMap[A.type],更新A.Field的FunsMap。
+###### personal understanding
+	源代码中，非直接调用的存在方式[4]：
+		callback functions
+		jump-table entries
+		virtual functions
+	函数指针存在的形式[4]：
+		a. Global Function Pointers
+		b. Struct Field
+		c. Formal Parameters
+		d. Class Members
+		e. Others. Local variables ,etc.
+
+	应用场景：代码优化，漏洞检测，CFI软件加固，静态分析调用流图。
+	识别方法：① 指针分析	 ② 类型分析
+	
+	对于类型分析,
+		动态分析方法，Type Feedback。
+		静态分析方法，CHA & MLTA & RTA。 CHA & MLTA 是基于匹配函数签名，添加了类和结构的限制。RTA在CHA和MLTA的基础上添加对象实例化的限制，认为没有实例化的对象，其虚方法不会被调用, 需要维护实例化类的数据结构，并且遍历程序的所有代码。
+	
+	可做的点：
+	1. 非直接调用+混淆？
+###### reference
+- [1] Lu, Kangjie, and Hong Hu. "Where does it go? refining indirect-call targets with multi-layer type analysis." Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security. 2019.
+- [2] Y. Sui and J. Xue. Value-Flow-Based Demand-Driven Pointer Analysis for C and
+C++. IEEE Transactions on Software Engineering, PP, 09 2018.
+- [3] Bacon, David F., and Peter F. Sweeney. "Fast static analysis of C++ virtual function calls." Proceedings of the 11th ACM SIGPLAN conference on Object-oriented programming, systems, languages, and applications. 1996.
+- [4] Aigner, Gerald, and Urs Hölzle. "Eliminating virtual function calls in C++ programs." European conference on object-oriented programming. Springer, Berlin, Heidelberg, 1996.
+- [5] Lu, Kangjie, Aditya Pakki, and Qiushi Wu. "Detecting missing-check bugs via semantic-and context-aware criticalness and constraints inferences." 28th {USENIX} Security Symposium ({USENIX} Security 19). 2019.
+- [6] Blasczyk, Zachary M., et al. "On the prevalence of indirect function calls in middleware software systems." 2017 IEEE International Conference on Electro Information Technology (EIT). IEEE, 2017.
+- [7] X. Ge, N. Talele, M. Payer, and T. Jaeger. Fine-grained control-flow integrity for kernel software. In 2016 IEEE European Symposium on Security and Privacy (EuroS P), pages 179–194, 2016.
+
 ##### 4.2 Identifying Critical Variables
 ###### 4.2.1 Identifying Security Checks for Critical Variables
 	CRIX 首先使用 LRSan 中的方法识别安全检查。 IF语句存在两个分支，一个处理安全检查失败(a. 返回错误码. b. 调用异常处理函数)，另一个继续正常执行流程。因此，识别安全检查需要符合这样的错误处理模式。 然而， LRSan 仅支持错误码返回的场景， CRIX扩展了这个功能。
@@ -311,7 +439,7 @@
 		* others: When CRIX cannot find a predecessor instruction, the current values are marked as sources.
 		* 后向查找父基本块
 		* allocation 不可能是 source.
-		* 若SCOpd = LoadInst取出的数据，那么找到LoadInst的地址别名，判断是否属于LI所属基本块的前驱(前向分析)。  分析 StoreInst 和 CallInst的参数。 
+		* 若SCOpd = LoadInst取出的数据，那么找到LoadInst的地址别名，判断是否属于LI所属基本块的前驱(前向分析)。  分析 StoreInst 和 CallInst的参数。  **先存到某个指针里，然后再load出来，那么就需要别名分析。**
 	* Definition of uses
 		过程间前向数据流分析收集 uses.
 		* 指针解引用
@@ -319,6 +447,7 @@
 		* 二元操作
 		* None. 其他认为是没有对危险变量进行使用。
 ![](images/Collect_sources_and_uses_of_critical_variables.jpg "")
+		该算法以关键变量集(CVSet)和函数集(FuncSet)作为输入。CVSet是从安全检查中提取的被检查变量，FuncSet是预先收集的输入函数(例如copy_from_user)和汇编函数的集合。FuncSet在CRIX的预处理阶段被收集，与安全检查标识同时被收集。然后算法产生两个集作为输出:SrcSet和UseSet，分别是源集和使用集。CVUseSet包含当前CV的直接使用和转发使用，由LL VM的value.users()函数返回。
 		CVUseSet 包含CV的立即使用，通过LLVM的value.users()函数获取。
 	Criticalness is instead inferred by measuring how frequently a critical variable is checked before being used。
 ##### 4.3 Constructing Peer Slices
@@ -374,7 +503,7 @@
 ##### 7.1 确定 ms bug 的可利用性和安全影响
 	利用符号执行验证 ms bug.
 	利用危险变量的使用确定潜在安全影响。
-	总而言之，自动化确定ubg可利用性和安全影响是一个研究难题。 ms 场景的可利用性和安全影响 可以解决误报问题。
+	总而言之，自动化确定bug可利用性和安全影响是一个研究难题。 ms 场景的可利用性和安全影响 可以解决误报问题。
 	 
 #### reference
 - https://www.youtube.com/watch?v=0pDNH-1pvzc : 视频
@@ -384,6 +513,7 @@
 	Ctx->CheckInstSets[F] : F内所有的SecurityCheckInst.
 	DataFlowAnalysis::findInFuncSourceCV : 在当前函数内追溯危险变量的源头。
 	MissingChecksPass::identifyCheckedTargets : 查找危险变量的源头。
+	address-taken functions : 被取过地址的函数
 
 #### CVE
 - CVE-2019-15030 : 安全检查位置不准确导致的安全检查缺失bug。 -> 安全检查bug检测标准。
@@ -399,12 +529,30 @@
 - 交叉检查 ->  切片相似度匹配方法改进？
 - ret 获取的危险变量，在之后的数据流未使用？ -> decrease fp.
 - ret 场景未写入变量？需要修复？
-- 这三类切片场景的头尾不明确？头尾的怎么确定？
+- 这三类切片场景的头尾不明确？头尾的怎么确定？  √
 - 安全检查的准确性 -- incorrect or inaccurate
 - 在一个函数体内，对同一个危险变量有多个不同的安全检查，那么与其他对等切片的语义判断？ 一样的？
 - 关于变量域的安全检查切片，如何交叉检查是一个问题？
 - 安全检查函数的结果分析？
 - 若是一个全新的bug，所有切片都没有安全检查，那么可以通过添加一个安全检查从而找到其他缺失检查的位置？
+- 对于切片约束的正确性，如果存在一个相同的语义而约束是相反的，如何校正的问题？
+- 实验对比：优化方面，前后结果的漏洞数量差距、增删的漏洞正确性对比。 -- 实验输出不唯一？？？
+- 识别危险变量的source和use，会重复遍历相同的指令，需要考虑唯一性。
+- 非直接调用目标函数体 为空或只返回。
+- 使用之前是否检查！需要找到危险变量被使用的位置，然后判断时候作了检查，否则误报。
+- 人工记录误报点。下次运行就不用
+- ppt制作汇报 -- 重点
+- 安全检查切片中，安全检查与异常处理函数的配对关系？异常处理函数是否得当，危险级别是否恰当？
+- 只写安全检查函数，忽略安全检查条件语句？
+- 使用代码度量指标作为特征，进行机器学习分析。
+- 利用输出结果，automatic program repair？
+- 利用指针分析进行信息泄漏，比如代码段地址等？malloc后未free? 检测 Use-after-return/scope bug? 
+- 漏洞可达性？ DataFetchFunction 输入点 - 参考crix附录？插桩、动态执行 获取函数函数调用路径？
+- CWE ： 从这些漏洞类型中受到启发，从而得知一种新漏洞检测方法？static initialization-order fiasco bugs for global objects?
+- llvm IR for llvm-mctoll (binaries?) or wllvm（c or c++) or capstone2llvmir?
+- on-demand ≈ selective ？
+- cross-checking -> 切片向量化映射到向量空间，使用ml/dl进行漏洞检测？
+- 对于外部库的分析，怎么解决效率问题？例如中间件。
 -------------------------------------------------------------------------------------------------------
 
 ### CCS20 - Exaggerated Error Handling Hurts! An In-Depth Study and Context-Aware Detection
@@ -449,7 +597,78 @@
 - [2] Chris Lattner and Vikram Adve. 2004.  LLVM: A Compilation Framework for Lifelong Program Analysis & Transformation. InProceedings of the InternationalSymposium on Code Generation and Optimization: Feedback-directed and Runtime Optimization (CGO ’04). IEEE Computer Society, 75–
 	
 -------------------------------------------------------------------------------------------------------
+### KUBO: Precise and Scalable Detection of User-triggerable Undefined Behavior Bugs in OS Kernel
+	1. Undefined Behavior bugs (UB）reside in software implemented  in  relatively  low-level  programming  languages  e.g.,C/C++， 包括包括整数溢出，除零操作，空指针解引用以及越界访问等等。 先前的工作基本都是为了scalability放弃precision,从而导致很高的误报率，严重影响他们的可用性。 
+	2. KUBO 关注由用户空间输入导致的UB(**以漏报换误报**)。 KUBO的高精度来源于 UB-triggering 路径和状态 的可满足性验证。 KUBO 发现了 23 UB。 KUBO (27.5%）的误报率比最先进的UB detector (91%) 低很多。 bug reports 很容易分类。
+#### Introduction
+	1. OS的安全性。
+	2. 介绍UB. 注： [1]中提及了C语言的未定义行为UB。 个人理解， 这个UB(Undefined Behaviour) 就是非预期的程序行为，我觉得跟bug是等价的。
+	3. UB 容易检测和触发。 注： 瞎说一通，没任何数据证明。
+	4. 先前关于检测UB的工作都遵循相同的idea：  They focus on UB instructions in code and try to determine if the corresponding UB conditions can  be  satisfied [2]。 然后讲解它们的缺点。
+	5. 描述一个scalable UB detector的特点。对先前的工作做一个总结。
+	
+	本文工作如下。
+	1. 提出了KUBO（Kernel-Undefined Behavior Oracle），主要关注由用户空间输入导致的UB。 设计了一种 后向用户空间输入 tracking 技术去检查 UB condition是否被这个输入修改。
+	2. 为了 scalability and precision, 执行 an on-demand incremental inter-procedural analysis (**沿调用链按需后向分析**)， 从每个UB指令开始，回溯到潜在用户输入点， 解决了标准符号执行不能应用于大规模程序的问题。 另外，  Named  incremental  call  chain  upwalk： 当needed时，仅回溯到一个在调用链上的被选择的caller。 这个need 是被  empirical UB triggerability indicator (Bug Triggerability Indicator BTI)决定。 After BTI is analyzed to be true, KUBO then scans the dependent parameters and only dive into the callers that taint them.
+	3. KUBO 收集沿途的路径约束，使用 SMT solver和UB condition 求解， 来确保路径可达且受用户输入控制。 KUBO 通过post-bug analysis 分析每个UB的结果，**((which checks if the value affected by a UB instruction is later used in an unintended way.))**
+	4. 描述成果。 分析时间，检测和提交bugs。
+	5. 根据这些bugs的通性，总结一个编程规范。
+	6. 评估KUBO的精度 in  two controlled experiments using independently established ground truth。
+		a. 对一个 old kernel version (包含19个已知的UB, CVE), can 12/19 (验证一些UB bugs)。
+		b. 对一个 latest kernel version, KUBO 报告了 40 UBs, 手动验证can 29/40（发现一些UB bugs)。 低误报率，和一些使用了heavier分析技术的UB detectors一样低，但是这些工具关注 a subset of UB (算术错误，整数溢出等）并且无法 解决 scalibility。
 
+	本文的贡献：
+	1. Userspace triggerable bugs. It uses a light-weight, summary-based dataflow analysis (on-demand) to track UB’s dependencies on data fetch from userspace. 
+	2. High-precision  detection. apply a new inter-procedural analysisthat tracks data and control dependencies across functioncalls.
+	3. Scalable  inter-procedural  analysis. The  on-demand,  in-cremental  call  chain  upwalk  analysis,  centering  arounduser-controlled data. 
+	4. Open  source。
+
+	本文其他章节的安排。
+#### Background and Motivation
+##### Undefined behaviours in kernel
+##### Prior efforts on finding UB
+##### Severity of kernel UBs
+#### KUBO System Design
+##### key concepts and terms
+	1. Userspace input。 KUBO只针对以下类型的UB以及UB条件。 根据CVE的统计结果说明论文的可行性。
+![](https://mmbiz.qpic.cn/mmbiz_png/uicdfzKrO21E4YDuaETPn03gcZFjyicLiaH0goxnI74TChUWiaSmsTey9y7CCJibqmHLZyBsUN23SKSz4iaaaV5GcFeA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1 "支持的UB以及UB条件")
+
+	针对用户空间输入，作者考虑以下三种情况：
+	a. syscall/ioctl的参数
+	b. sysctl/sysfs
+	c. memory data transfer function（例如copy_from_user()）
+	**根据调查统计，其他类型的不可信UB输入源（network payload and I/O device)引发的bug比较少。(工作量--)。 列举做这些输入源的previous work**。 这个也可以作为limitation。
+	2. Discussed UB scope and triggering condition。
+	3. UB  instruction。 如果一条指令直接导致UB, 那么称它为 UB instruction。
+##### System overview
+	KUBO的检测流程如下图所示：
+![](https://mmbiz.qpic.cn/mmbiz_png/uicdfzKrO21E4YDuaETPn03gcZFjyicLiaHGlriaca1rNraTaMhIW2EPtuM2NgRHXrZSYzU7g1ULMCwib2S4yK3b6oQ/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1 "KUBO workflow overview")
+
+	KUBO选取UBSan所插桩的指令作为UB指令，并通过Backward Userspace Input Tracking来确认UB指令是否处理用户空间输入的数据以及UB条件是否会满足，并进行相应报告。对于更为复杂的情况，则需要利用BTI（Bug Triggerability Indicator）Calculation以及Callchain Upwalk来确认。
+	具体来说，
+	* Backward Userspace Input Tracking通过污点分析为数据标记tag（Userspace Input，Const以及Not known yet）。
+	* BTI利用符号执行以及约束求解来判断bug是否会被触发。
+	* Callchain Upwalk在调用链中向后回溯，以解决过程间检测的问题。
+
+
+#### reference
+- [1] A N S I / I S O.  Iso/iec 9899:2018.  https://www.iso.org/standard/74528.html, 2018. ： ISO规定的C语言标准
+- [2] https://www.kernel.org/doc/html/v4.14/dev-tools/ubsan.html : UBSAN, 一种内核支持的 runtime undefined behaviour checker。 在编译时期，在可能导致UB的地方插入check代码。 GCC has that feature since 4.9.x (see -fsanitize=undefined option and its suboptions). GCC 5.x has more checkers implemented.
+-------------------------------------------------------------------------------------------------------
+### TrustCom21:  VulChecker: Achieving More Effective Taint Analysis by Identifying Sanitizers Automatically 
+	The paper provides a tool and set of techniques to detect sanitizers in code. Santiizers are pieces of code that inspect or alter input or other data to avoid attacks based on such input or data. The tool detection strength is evaluated against other tools (for more general purpose), and it performs better. The tool's falso positive rate is particularly good.
+	This paper solves the automatic detection of vulnerabilities in Web applications and proposes an identification method based on semantic analysis. The experimental results show that the proposed approach is highly effective in improving vulnerability detection based on taint analysis.
+-------------------------------------------------------------------------------------------------------
+### PatchDB: A Large-Scale Security Patch Dataset
+	安全补丁, embedding both vulnerable code and the corresponding fixes, 对于漏洞检测和维护具有重要意义。 
+	本文构建了一个名为 PatchDB 的大规模补丁数据集，分为基于NVD，wild-based, synthetic 这三种数据集。
+	为了提高数据收集效率和减少人工验证的工作量，我们开发了一种新的最近链接搜索方法，以帮助找到最有前途的安全补丁候选。
+	我们提供了一个合成数据集，它使用一种新的过采样方法，通过丰富原始补丁的控制流变体，在源代码级别合成补丁。
+	实验结果表明，PatchDB有助于提高安全补丁识别的性能。
+-------------------------------------------------------------------------------------------------------
+### SelectiveTaint: Efficient Data Flow Tracking With Static Binary Rewriting
+	略看：类似 污点分析场景下的静态前向程序切片，获取污点分析相关的指令集合。对比主流的二进制动态污点分析技术，静态方法具有更加卓越的性能。
+-------------------------------------------------------------------------------------------------------
 ## authentication and authorisation
 	验证： something you know/hava/are.
 ## other
@@ -458,9 +677,96 @@
 - word2vec模型将程序切片转换成向量表示。
 - PDG ： program dependency graph.
 - 高质量的漏洞数据集是应用深度学习实现漏洞检测的关键.在软件漏洞领域,尚未形成标准的漏洞数据集,研究者通常需要自己去构造数据集.有部分研究者公开自己的数据集。
+- cross-checking 
+	1. scalibility. not every.
+	2. similarity. Find sufficient semantically-similar code. Majority. Minority. Assumption.
+	3. granularity. Optimize the comparison levels. Not too coarse-grained or too fine-grained.
+- submiting linux bug into linux community.
+	1. 安装邮件客户端
+		使用 git send-email 发送 patches. 在 `~/.gitconfig` 中添加。
+```
+[sendemail]
+  ; setup for using git send-email; prompts for password
+  smtpuser = myemailaddr@gmail.com
+  smtpserver = smtp.googlemail.com
+  smtpencryption = tls
+  smtpserverport = 587
+```
+		安装邮件客户端：https://nickdesaulniers.github.io/blog/2016/06/18/mutt-gmail-ubuntu/
+	2. Make fixes
+		using static analysis, a different compiler, and/or more compiler warnings turned on. 
+		kernel -> bugzilla running as a issue tracker.
+	3. 有详细的提交信息
+		格式如： `<subsystem>/<sub-subsystem>: <descriptive comment>`
+		提交命令： `git commit <files> -s`。 `-s` 是为了添加签名
+	4. 生成patch file.
+		生成命令： `git format-patch HEAD~<number of commits to convert to patches>`。
+		这些 patch file 	将被发送到 Linux Kernel Mailing List (lkml)。
+		应用补丁： `git am <patchfile>`。
+	5. checkpatch
+		在提交 patch 之前， 运行这个内核 linker。
+```
+./scripts/checkpatch.pl 0001-x86-build-don-t-add-maccumulate-outgoing-args-w-o-co.patch
+total: 0 errors, 0 warnings, 9 lines checked
+```
+		需要修改 commit 的话，`git commit --amend <files updated>`
+	6. 将patch 发送给自己
+```
+$ git send-email \
+0001-x86-build-require-only-gcc-use-maccumulate-outgoing-.patch
+```
+	7. 发送patch
+		对于每个子系统，都有许多 maintainers。 查找维护者。
+```
+$ ./scripts/get_maintainer.pl 0001-x86-build-don-t-add-maccumulate-outgoing-args-w-o-co.patch
+Person A <person@a.com> (maintainer:X86 ARCHITECTURE (32-BIT AND 64-BIT))
+Person B <person@b.com> (maintainer:X86 ARCHITECTURE (32-BIT AND 64-BIT))
+Person C <person@c.com> (maintainer:X86 ARCHITECTURE (32-BIT AND 64-BIT))
+x86@kernel.org (maintainer:X86 ARCHITECTURE (32-BIT AND 64-BIT))
+linux-kernel@vger.kernel.org (open list:X86 ARCHITECTURE (32-BIT AND 64-BIT))
+```
+		发送 patches。
+```
+$ git send-email \
+--cc-cmd='./scripts/get_maintainer.pl --norolestats 0001-my.patch' \
+--cc person@a.com \
+0001-my.patch
+```
+	8. 管理反馈
+		Patchwork 追踪 patch 进程: https://patchwork.kernel.org/project/LKML/list/。
+	9. 对反馈的回应
+```
+$ git send-email \
+--cc-cmd='./scripts/get_maintainer.pl --norolestats 0001-my.patch' \
+--cc person@a.com \
+--in-reply-to 2017datesandletters@somehostname \
+0001-my.patch
+```
+	当然可以将这个函数加进 `~/.bashrc` 
+```
+function kpatch () {
+  patch=$1
+  shift
+  git send-email \
+    --cc-cmd="./scripts/get_maintainer.pl --norolestats $patch" \
+    $@ $patch
+}
+```
+	调用方式：
+```
+kpatch 0001-Input-mousedev-fix-implicit-conversion-warning.patch --cc anyone@else.com
+```
+	
+	
+	参考： 
+	a. how to send patches to the kernel in these documents. 
+	https://nickdesaulniers.github.io/blog/2017/05/16/submitting-your-first-patch-to-the-linux-kernel-and-responding-to-feedback/
+	https://kernelnewbies.org/FirstKernelPatch
+	b. how to track your submitted patches.
+	https://lore.kernel.org/patchwork/project/lkml/list/
 
-## todo
-- 写论文
+
+## 写论文
 	- 论文introduction中最好讲解 a. 背景知识。 b. 一个跟idea相关的例子 c. 重要性，它的作用。 d. 挑战性。 e. 本文工作。
 	- 论文需要discussion(局限性和未来工作), 相关工作章节。
 	**details**
@@ -468,6 +774,37 @@
 	- 贡献要简要且全面地概括自己的工作。
 	- 介绍的首段需要多一点引用。
 	- 论文编写尽可能用 latex。
+	- 如何检测一类新漏洞 -- 通过cvedetails.com总结模式。 
+	- 拓宽视野，看相关论文。
+###综述
+	关注领域牛人，他们的论文和引用文献。 本领域的课题组和牛人。高引用次数的文献。
+	对于相同的文献，我们查找原始的文献，接着写自己的理解。
+## todo
 - 写extra
 - 学习
 - 漏洞挖掘：1. 历史漏洞。 2. 搜索关键函数。 3. 从功能看源码。
+- DSN-AITS 视频和ppt by June 1
+	- The attendees can participate in the paper discussions asynchronously via Slack channels. In addition, we will arrange a video conferencing Q&A session for each paper, where the authors will answer live. 
+	- 提交网址：https:*****//www.********dropbox.com/request/**********DQEkvTdTcOP6FtVc0UOD
+	- 注： 
+		- a. mp4-format videos，slides. 都要满足一些要求。
+		- b. The conference virtual background for your speaker inset can be downloaded 
+		- c. You can create the video with Zoom
+		- d. Introduction slide at the beginning of your presentation that clearly lists the name of your paper and the authors
+		- e. Closing slide to thank your audience and/or collaborators and list your contact information should you wish to receive follow-up questions from attendees
+		- f. With page numbers
+		- g. convert ppt into PDF Format.
+	- PPT
+		- background -> motivation -> system overview(design & implementation) -> evaluation -> conclusion
+			1. Security checks safeguard the OS kernel state. 1
+			2. Some common classes of security checks. 2
+			3. why安全检查切片。 3
+			4. Possible approaches and challeges. 可能性方法(程序切片) 和构建切片的挑战。 4
+			5. 安全检查切片的定义以及切片准则 5-6
+			6. SCSlicer overview 7
+			7. implementation 8
+			8. Evaluation 9
+			9. limitation 10
+			10. conclusion 11
+		- reference: crix ppt, DSN20-bestpaper video 3:00-。
+

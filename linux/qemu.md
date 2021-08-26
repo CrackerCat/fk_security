@@ -9,7 +9,7 @@
 ### virtualization
 	* 完全虚拟化。 虚拟机内核不作任何修改，单纯由软件模拟。
 	* 半虚拟化。 加入VT-X技术，对内核进行一定程度的修改。 
-		* VT-X -> VMX root operation 和 VMX non-root operation 两种模式，都支持Ring0-Ring3, 这样VMM可以运行在VMX root operation模式下，Guest OS运行在VMX non-root operation模式下。 KVM基于x86硬件虚拟化技术，要求VT-X。 现在QEMU/KVM分为两部分，分别运行在kernel模式的KVM内核模块和运行在User模式的Qemu模块（指的是VMX root模式下的ring0和ring3)。 QEMU/KVM作为guest os的 VMM, 而对应的虚拟机运行在VMX non-root模式下，又称guest模式。 QEMU线程与KVM内核模块之间的交互以 ioctl 的方式进行交互，而Guest和KVM内核模块之间的交互通过 VM Exit 和 VM entry 操作进行交互。
+		* VT-X -> VMX root operation 和 VMX non-root operation 两种模式，都支持Ring0-Ring3, 这样VMM可以运行在VMX root operation模式下，Guest OS运行在VMX non-root operation模式下。 KVM基于x86硬件虚拟化技术，要求VT-X。 现在QEMU/KVM分为两部分，分别是运行在kernel模式的KVM内核模块和运行在User模式的Qemu模块（指的是VMX root模式下的ring0和ring3)。 QEMU/KVM作为guest os的 VMM, 而对应的虚拟机运行在VMX non-root模式下，又称guest模式。 QEMU线程与KVM内核模块之间的交互以 ioctl 的方式进行交互，而Guest os和KVM内核模块之间的交互通过 VM Exit 和 VM entry 操作进行交互。启动流程如下：
 			* QEMU线程以ioctl的方式指示 KVM 内核模块进行vcpu的创建和初始化操作，在初始化完成后，QEMU线程以ioctl的方式向KVM内核模块发出运行vcpu的指示，KVM内核模块执行VM entry操作，进入 VMX non-root模式，中断host软件，运行Guest软件。 在Guest运行时，如果发生发生异常或外部中断事件，或执行I/O操作，可能会导致 VM exit,切换回 VMX root模式，KVM内核模块会检查 VM exit的原因。 
 				* 如果是由 I/O 操作导致，就执行系统调用返回操作，将I/O操作交给 ring3 的QEMU线程来处理，QEMU线程处理完毕后再次执行ioctl，指示KVM切换到 VMX non-root, 恢复Guest的运行；
 				* 如果VM exit是其他原因导致，则由 KVM 内核模块负责，并在处理完切换到 VMX non-root 模式，恢复Guest的运行。
@@ -273,4 +273,5 @@ struct YourDeviceState{
 #### reference
 - https://kojipkgs.fedoraproject.org//vol/fedora_koji_archive05/packages/qemu/4.0.0/1.fc31/data/logs/aarch64/build.log : 编译日志参考链接
 
+## pwn
 ---

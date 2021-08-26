@@ -210,6 +210,9 @@ m = m2 + h*q
 	大多数是Cert=(K(pub),ID,sig(K(pub),ID))
 ### certifying authority(CA)
 	分发证书的可信组织。
+### self-signed certificates
+	用自己的私钥签署的数字证书.
+	If the client accepts the self-signed certificates, then it’s easy to man-in-the-middle.
 
 ### 非对称密码和对称密码的差异
 	1. 对称密码适合对大数据进行加密，效率高，通常采用非对称加密对秘钥加密。
@@ -290,3 +293,6 @@ int main()
     return 0;
 }
 ```
+## paper
+### WPKI Certificate Verification Scheme Based on Certificate Digest Signature-Online Certificate Status Protocol
+	Aiming at the problems of the WPKI certificate verification schemes based on online certificate status protocol (OCSP), this paper proposes a WPKI certificate verification scheme based on the certificate digest signature-online certificate status protocol (CDS_OCSP). 

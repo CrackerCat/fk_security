@@ -10,6 +10,15 @@
 * <sub>num</sub> : 下标
 * `text` : 高亮
 
+## tools
+### Markdown pad2
+#### 图片插入
+	1. 本地图片插入
+	图片资源和.md文件放置在一个文件夹中。
+	![IO框图](1.png)
+	2. 有道云笔记图片及其他网页图片插入 
+	打开图片，选择分享，查看分享，复制图片地址。
+	![IO框图](https://note.youdao.com/yws/api/personal/file/WEB7e32d3ada6791bc2bf26616fc8b8ad25?method=download&shareKey=a928e80bf4548e74ee37e7a6aa46cfe2)
 ---
 ## refrence
 - [markdonw 语法说明 (简体中文版)](https://www.appinn.com/markdown/index.html "markdonw 语法说明 (简体中文版)")

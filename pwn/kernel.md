@@ -15,7 +15,7 @@
 	开启klaslr后，.text/.rodata/.init/.data/.bss这些段相对于链接地址都加上了一个offset。
 ##### bypass
 	可以通过某些方法泄露内核全局变量的真正地址并打印到dmesg中，这样就可以破解offset的值了。
-##### kalsr
+##### kalsr特点
 	1. 支持kaslr之前，kernel加载到system RAM的某个位置，它之前的内存kernel是无法管理的，所以一般将kernel加载到system RAM的 起始位置+TEXT_OFFSET（0x080000）处，因为kaslr修改成可以随意加载到system RAM的任何位置，只要满足对齐要求就可以；
 	2. 支持kaslr之前，kernel image是映射到线性映射区域的，因为kaslr才修改成映射到vmalloc区域；
 	3. 为了支持kaslr，内核要编译成PIE(Position Independent Execuable)，才能重映射。
@@ -30,6 +30,7 @@
 	3. 通过 push 保存各寄存器值。 //1-3保存并切换cpu上下文。
 	4. 通过汇编指令判断是否为 x32_abi。
 	5. 通过系统调用号，跳到全局变量 sys_call_table 相应位置继续执行系统调用。
+	注：swapgs指令只可用于 64位，负责交换两个MSR(model specific register)的值(IA32_GS_BASE and IA32_KERNEL_GS_BASE, 由于历史原因导致IA32_开头)。
 #### kernel space to user space
 	退出时，流程如下：
 	1. 通过 swapgs 恢复 GS 值
@@ -97,7 +98,7 @@ asm(
 	* smap: Superivisor Mode Access Protection，类似于 smep，通常是在访问数据时。
 	* mmap_min_addr:	
 	
-### start
+### lauch
 	一般会给以下三个文件:
 	1. boot.sh: 一个用于启动 kernel 的 shell 的脚本，多用 qemu，保护措施与 qemu 不同的启动参数有关.
 	2. bzImage: kernel binary
@@ -162,6 +163,7 @@ struct file_operations  {
      ... 
 };
 ```
+
 #### busybox
 	busybox是一个集成了一百多个最常用linux命令和工具的软件,他甚至还集成了一个http服务器和一个telnet服务器,而所有这一切功能却只有区区1M左右的大小。
 	- setsid cttyhack sh : Starting interactive shell from boot shell script.
@@ -183,7 +185,21 @@ struct file_operations  {
 #### ptmx
 	当我们open("/dev/ptmx")的时候，会分配一个tty_operation的结构体,覆盖该结构体可以将控制流劫持到我们的代码中。
 #### kernel rop
+	rop 执行 commit_creds(prepare_kernel_cred(0))；返回用户态，通过 system("/bin/sh") 等起 shell；
 #### kernel uaf
+##### example
+	1. 设备。
+		a. 打开两次设备，通过 ioctl 更改其大小为 cred 结构体的大小
+		b. 释放其中一个，fork 一个新进程，那么这个新进程的 cred 的空间就会和之前释放的空间重叠
+		c. 我们可以通过另一个文件描述符对这块空间写，只需要将 uid，gid 改为 0，即可以实现提权到 root
+#### kernel double free
+	SLUB的一个特性(FILO), 在slub中实现了一个 **单向链表(第一个八字节是fd)** , 每个节点的下一个元素保存在这个节点指向的内存的一个偏移处(kmem_cache->offset). 在double free环境中, 导致这个链表出现一个环, 于是后续的申请能得到指向同一个空间的两个对象.
+##### patch history
+	1. 在进行连续的kfree的时候会起作用终止当前进程. 但是如果在连续的kfree之间其他进程kfree了相邻的一些对象, 导致page->freelist改写, 补丁无作用. - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=ce6fa91b93630396ca220c33dd38ffc62686d499 add a naive detection of double free or corruption
+	2. 将写入对象首地址(s->offset=0)的数据进行异或, 在申请对象的时候进行逆运算得到下一个申请的对象的位置. - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=2482ddec add SLUB free list pointer obfuscation
+	3. 在申请一个对象的时候, 得到下一个可以申请的对象的位置, 同时对下一个对象保存的异或数据进行逆运算, 然后检测那个位置是否合法. - https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=0ad9500e1 prefetch next freelist pointer in slab_alloc
+##### reference
+- https://paper.seebug.org/470/ : patch introduction
 #### kernel ret2usr
 	进入内核态后，不需构造调用链，使用应用层的代码，从而完成一些功能。
 ##### reference
@@ -199,7 +215,7 @@ struct file_operations  {
 ```
 
 ## 漏洞分析
-### Linux Kernel 4.20rc1-4.20rc4，BPF模块整数溢出
+### Linux Kernel 4.20rc1-4.20rc4，BPF模块整数溢出 + 堆溢出
 	a. 漏洞触发路径：bpf->map_create->find_and_alloc_map->queue_stack_map_alloc。
 	b. 达到漏洞函数的条件。
 ```
@@ -221,7 +237,7 @@ bpf_map_area_alloc{
  
   queue_size = sizeof(*qs) + (u64) value_size * size;
   ......
-qs = bpf_map_area_alloc(queue_size, numa_node);
+qs = bpf_map_area_alloc(queue_size, numa_node); // numa_node存储着attr
 ......
 bpf_map_init_from_attr(&qs->map, attr);
   ......
@@ -266,6 +282,9 @@ struct bpf_map {
 }
 ```
 	看到其第一个成员就是虚表指针 ops ，换句话说，在我们kamlloc出的slab中的第一个位置就是指向当前map虚表的指针，如果我们能通过上方的slab堆溢出，劫持下方slab的虚表指针，再fake相应的vtable，就可以实现一套内核的执行流劫持。
+### CVE-2021-33909 - Ubuntu 20.04, Ubuntu 20.10, Ubuntu 21.04, Debian 11, and Fedora 34 Workstation
+	本地权限提升漏洞：A Local Privilege Escalation Vulnerability in Linux’s Filesystem Layer。
+### Linux_LPE_eBPF_CVE-2021-3490 - Ubuntu 20.04.02，20.10 (Groovy Gorilla)，Ubuntu 21.04 (Hirsute Hippo) 
 ### 5.11.10 bug分析
 #### ethernet/realtek/r8169_main.c
 	1. 漏洞点-- 安全检查函数缺失：
@@ -320,6 +339,23 @@ static void rtl_set_def_aspm_entry_latency(struct rtl8169_private *tp)
 	4. 需要补充的知识
 		a. Realtek RTL 8125
 			The RTL 8125 is a 2.5 GiB Ethernet network chip for 2.5 Gigabit networking over standard CAT5e/CAT6 wiring.
+#### potential bugs
+- drm/i915/gem/i915_gem_phys.c +93 0 and 1 : 未检查
+- drm/i915/gem/i915_gem_stolen.c +590 0 and 1 : 未检查 
+- i2c-core-base.c +2332 0 ： 空指针解引用
+- quirks.c +3901 0 ： 空指针解引用
+- drm/i915/gt/intel_ggtt.c +1052 0 : 缺失释放函数，内存泄露。
+- ti113x.h +966 0 ： 缺失check function, 
+- ti113x.h +883 : 缺失check function
+- topic.h +141 :  缺失check function
+- topic.h +133 : 缺失check function
+- core/usb.c +860 0 ： 空指针解引用
+- ethernet/realtek/r8169_main.c +2685 0 : 缺失check function
+- ethernet/realtek/r8169_main.c +3415 0 :  缺失check function
+- ethernet/realtek/r8169_main.c +3428 0 :	缺失check function
+- ethernet/realtek/r8169_main.c +3489 :	缺失check function
+- ethernet/realtek/r8169_main.c +2690 +2764 +2889 +2907 +2949 +2966 +2987 +3242 +3261 +3281 +3408 +3415 +3455 +3489 +3514 ： 缺失check function
+
 ## reference
 - https://zh.wikipedia.org/wiki / 内核
 - https://zh.wikipedia.org/wiki / 分级保护域

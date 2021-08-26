@@ -53,6 +53,8 @@ linux下用的编码一般是utf-8，而 windows 一般是gb2312
 ```
 iconv -f gb2312 -t utf-8 1.txt> 2.txt
 ```
+	todos（相当于unix2dos），和fromdos（相当于dos2unix）.
+
 # fs  
 ## extend disk volume  
 1. vmware setting中扩展磁盘容量  
@@ -72,3 +74,14 @@ iconv -f gb2312 -t utf-8 1.txt> 2.txt
 1. dd if=/dev/zero of=/tmp/mem.swap bs=1M count=4096   (4G)
 2. mkswap /tmp/mem.swap
 3. swapon /tmp/mem.swap
+
+# VPN
+## OpenVPN
+	连接VPN.
+	1. 下載 VPN 設定檔：config.ovpn
+	2. sudo openvpn  --config config.ovpn 
+	3. 執行 ip route 後，出現了若干條 172 開頭的路由規則，這也是成功的。
+
+# music
+## napster
+	一款可以在网络中下载自己想要的MP3文件的软件。它同时能够让自己的机器也成为一台服务器，为其它用户提供下载。第一个被广泛应用的点对点（Peer-to-Peer，P2P）音乐共享服务.

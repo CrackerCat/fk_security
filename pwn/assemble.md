@@ -1,3 +1,16 @@
+# 文件格式
+## PE文件
+### PE文件格式
+	可执行系列：EXE、SCR
+	库系列：DLL, OCX, CPL, DRV
+	驱动程序系列：SYS, VXD
+	对象文件系列：OBJ
+### 基本结构
+	1. 从DOS头到节区头是PE头部分，其下的节区合称为PE体。
+		a. PE头分为 DOS头和NT头。NT头中可选头 = EP + PE头大小 + DataDirectory数组(含有IDT导入描述表)。
+	2. 文件中使用偏移（offset），内存中使用VA（Virtual Address，虚拟地址）来表示位置。文件加载到内存时，情况就会发生变化（节区大小、位置等）。文件的内容一般可分为代码（.text）、数据（.data）、资源（.rsrc）节，分别保存。
+	
+	
 # x86 assembly language
   主流的两种汇编语言是 intel Assembly Language 和 AT&T Assembly language.
   x86汇编一直存在两种不同的语法，在intel的官方文档中使用intel语法，Windows也使用intel语法，而UNIX平台的汇编器一直使用AT&T语法。
@@ -21,6 +34,10 @@
 * movzx dst src : 用于将较小值拷贝到较大值中, 扩展至16位或者32位,只适用于无符号整数
 * movsx dst src : 将源操作数内容复制到目的操作数，并把目的操作数符号扩展到 16 位或 32 位。这条指令只用于有符号整数。存在符号扩展。
 * lea 计算一个表达式的结果.  LEA EAX, [123 + 4*EBX + ESI]  
+* jmp 无条件转移指令
+	* 依据位移进行转移的jmp指令，jmp short 标号 ： 转到标号处执行指令，实现的是段内短转移，往前跳转 标号对应的offset。(IP)=(IP)+8位位移。8位位移是编译程序时在编译时算出的。jmp near ptr 标号 功能为：段内近转移，16位位移是编译程序时在编译时算出的。
+	* 转移的目的地址在指令中的jmp指令，jmp far ptr 标号 ：段间转移
+	* 转移地址在寄存器中的jmp指令，jmp 16位reg ：
 * jnz=jne: ZF标志位不为0时jmp; jz=je刚好相反  
 * jg=ja 前大于后
 * jge 前大于等于后
@@ -50,6 +67,8 @@
 * FLD STReg/MemReal : 将浮点数据压入协处理器的堆栈中。 将值以浮点型放进ST0里面 
 * FSTP STReg/MemReal : 进行堆栈的弹出操作，堆栈将发生变化。 将ST0里面的浮点值，放到STReg/MemReal里面，同是清空ST0里面的值
 * FST STReg/MemReal : 将协处理器堆栈栈顶的数据传送到目标操作数中。不进行堆栈的弹出操作。
+* div reg : rax= rax/reg
+* .byte : 它允许您声明一个常量字节，只有通过检查才能知道，而没有任何上下文。 同理有 .short, .long 对应 2/4 字节数据。 这些数据直接充当二进制指令。
 
 ### 几个术语
 * 字节：8位，后缀：b

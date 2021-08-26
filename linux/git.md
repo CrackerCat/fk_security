@@ -23,5 +23,13 @@
 - git diff HEAD^ path/file : 与提交记录进行对比
 - git rm --cached "文件路径" ： 不删除物理文件，仅将该文件从缓存中删除
 - git rm --f  "文件路径"，不仅将该文件从缓存中删除，还会将物理文件删除（不会回收到垃圾桶）
-- 
+- git clone -- 建议使用http的形式
+
+## patch
+	1. diff的方式
+		a. diff -uNr old new > patch;
+		b. cat patch| /usr/bin/patch -p1 -s --fuzz=0 --no-backup-if-mismatch
+	2. git apply的方式
+		使用git format的patch.
+	3. 直接替换文件  
 ---

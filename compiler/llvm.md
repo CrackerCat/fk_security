@@ -26,6 +26,7 @@ $ make -j8 CC=wllvm
 ## clang
 -  -Xclang -disable-O0-optnone -O0 : 生成SSA形式的IR.
 - ./configure CFLAGS="para"  : CFLAGS 等价于 CFLAG="-S"
+- --emit-llvm : 生成IR文件
 
 ## llvm pass  
 	能够将代码进行转化和优化，所有pass都是Pass类的子类。

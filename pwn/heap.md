@@ -1,4 +1,4 @@
-# 堆  
+# linux 堆  
 	堆是程序虚拟地址空间的一块连续的线性区域，由低地址向高地址方向增长。管理堆的那部分程序为堆管理器，处于用户程序和内核中间.  
 	linux中glic堆进行实现，堆分配器是ptmalloc,在glibc-2.3.x之后，glibc中集成了ptmalloc2。ptmalloc2主要是通过malloc/free函数来分配和释放内存块。Linux有这样的一个基本内存管理思想，只有当真正访问一个地址的时候，系统才会建立虚拟页面与物理页面的映射关系。  
 	堆是从内存地址向内存高址增长的。栈是从内存高地址向低地址增长。栈位于进程较高的位置，堆位于进程较低的位置。  
@@ -472,7 +472,7 @@ static void malloc_init_state(mstate av) {
 	- 3. small bins 后面的 bin 被称作 large bins。large bins 中的每一个 bin 都包含一定范围内的 chunk，其中的 chunk 按 fd 指针的顺序从大到小排列。相同大小的 chunk 同样按照最近使用顺序排列。  
 	ptmalloc 为了提高分配的速度，会把一些小的 chunk 先放到 fast bins 的容器内。而且，fastbin 容器中的 chunk 的使用标记总是被置位的，所以不满足上面的原则。    
 ### Tcache
-	Tcache的引入是从Glibc2.26开始的, 是一个为了内存分配速度而存在的机制，当size不大（这个程度后面讲）堆块free后，不会直接进入各种bin，而是进入tcache，如果下次需要该大小内存，直接讲tcache分配出去，跟fastbin蛮像的，但是其size的范围比fastbin大多了，他有64个bin链数组(按size_sz*2增长)，也就是(64+1)*size_sz*2(>64*size_sz*2)，在64位系统中就是0x410大小。也就是说，在64位情况下，tcache可以接受0x20~0x410大小的堆块。
+	Tcache的引入是从Glibc2.26开始的, 是一个为了内存分配速度而存在的机制，当size不大（这个程度后面讲）堆块free后，不会直接进入各种bin，而是进入tcache，如果下次需要该大小内存，直接将tcache分配出去，跟fastbin蛮像的，但是其size的范围比fastbin大多了，他有64个bin链数组(按size_sz*2增长)，也就是(64+1)*size_sz*2(>64*size_sz*2)，在64位系统中就是0x410大小。也就是说，在64位情况下，tcache可以接受0x20~0x410大小的堆块。
 #### Tcache 重要结构体及函数
 * tcache_entry struct
 
@@ -784,7 +784,6 @@ errout:
  
 ## unsortedbin attack
 	释放离散的chunk，才会在unsortedbin中。
-    
 ### exploitation
 	1. 创建chunk0, 大小保证free后能够放进unsortedbin,紧接着创建chunk1。
 	2. free(chunk0), 此时chunk0的fd,bk都指向unsortedbin，即main_arena+88(这里存着chunk0.fd的地址)。
@@ -832,13 +831,23 @@ errout:
 	2. 有double free的情况下，连续free 8次同一个堆块，这里堆块大小，大于fastbin范围。
 	3. 申请大堆块，大于0x410。
 	4. 修改堆上的Tcache管理结构
-	5. 当没有打印函数时，修改IO_2_1_stdout的_IO_write_base，这样，当再次调用puts或printf的时候，就会泄露出_IO_write_base~_IO_write_ptr之间的数据。 _flags需要满足 0xfbad2087 | 0x1000 | 0x800。
+	5. 当没有打印函数时，修改IO_2_1_stdout的_IO_write_base，这样，当再次调用puts或printf的时候，就会泄露出_IO_write_base~_IO_write_ptr之间的数据。 _flags需要满足 0xfbad2087 | 0x1000 | 0x800 = 0xfbad3887。因此，常将stdout的flags修改成0xfbad1800也可以，将_IO_write_base改小，就可以造成libc和stack的泄漏。
+	6. 利用 off by one 泄露。chunk1 在 unsortedbin 里，切割unsortedbin修改chunk1，从而写入unsortedbin 的fd和bk。   
 #### Tcache double free
 	* 2.27的环境
 		实现任意地址写。
 		1. add(0);
 		2. free(0);free(0)
 		3. add(0, target_addr);add(0, target_addr);add(0, any_value);
+##### tcache double free的使用
+	* 制造overlap.
+		1. 泄露heap部分地址。
+		2. 使用double free修改fd，使fd指向某个任意堆地址。
+		3. 利用 malloc函数 和 <edit>函数 修改目标chunk的prevsize和size。-> 生成任意大小的chunk。
+			当 伪造的size >= 0x420 时：
+			i. free 该伪造的chunk -> 生成一个任意大小的 unsortedbin -> overlap
+			ii. malloc -> 修改堆上任意地址为 libc地址。
+			iii. <edit> -> 部分写 tcache的fd指针指向 stdout -> 修改write_base -> stdout信息泄露。 
 ### tcache dup
 	类似 fastbin dup，不过利用的是 tcache_put() 的不严谨.
 ```
@@ -1044,7 +1053,30 @@ assert((old_top == initial_top(av) && old_size == 0) ||
 	2. 获取main_arena偏移量。 
 	3. 获取调试阶段的libc基址。
 	4. 它们的差值就是偏移量。
-
+#### 在没有符号表情况下查找 main_arena
+	用ida打开libc.so
+	1. 通过malloc_trim函数定位
+```
+int
+__malloc_trim (size_t s)
+{
+  int result = 0;
+  if (__malloc_initialized < 0)
+    ptmalloc_init ();
+  mstate ar_ptr = &main_arena;
+  do
+    {
+      __libc_lock_lock (ar_ptr->mutex);
+      result |= mtrim (ar_ptr, s);
+      __libc_lock_unlock (ar_ptr->mutex);
+      ar_ptr = ar_ptr->next;
+    }
+  while (ar_ptr != &main_arena);
+  return result;
+}
+```
+	2. 通过malloc_hook定位
+	3. 解引用一些这个地址malloc_hook,可以发现很多位置。
 ### glibc
 - 2.23最经典
 - 2.26加入tcache
@@ -1083,8 +1115,238 @@ if (width >= WORK_BUFFER_SIZE - EXTSIZ)
 ---
 
 ### scanf函数的利用
-	When you input a very long string to scanf , it will malloc a buffer to handle it.  当你输入一个很长的字符串，scanf会malloc一个largechunk来处理这个字符串。
+	When you input a very long string to scanf , it will malloc a buffer to handle it.  当你输入一个很长的字符串，即使使用setbuf()关闭了输入缓冲区，scanf会malloc一个largechunk来处理这个字符串。
 
 ### to-do list
 - https://www.anquanke.com/post/id/222948 : house-of系列
 
+# windows heap
+## 堆管理机制
+	1. Nt Heap: 默认使用的内存管理机制
+	2. SegmentHeap：Win10中全新的内存管理机制
+### Nt Heap Overview
+```
+                                                                                        (Front-End)
+                                                                                        +-------------------------------+
+                                                                                        |           ntdll.dll           |
+                                                                                        +-------------------------------+
+                                                                                        | +---------------------------+ |
+                                                                      +-------------->  | |    RtlpLowFragHeapAlloc   | |
+                                                                      |                 | |    RtlpLowFragHeapFree    | |
+                                                                      |                 | +---------------------------+ |
+                                                                      |                 +-------------------------------+
+                                                                      |                                | 
+                                                                      |                                | 
+                                                                      |                     (Back-End) V  
++---------------+         +---------------------+         +-----------------------+         +-----------------------+
+| msvcrt140.dll |         |     Kernel32.dll    |         |       ntdll.dll       |         |       ntdll.dll       |
++---------------+         +---------------------+         +-----------------------+         +-----------------------+
+| +-----------+ |         | +-----------------+ |         | +-------------------+ |         | +-------------------+ |
+| |   malloc  | |  ---->  | |    HeapAlloc    | |  ---->  | |  RtlAllocateHeap  | |  ---->  | |  RtlpAllocateHeap | | 
+| |    free   | |         | |    HeapFree     | |         | |    RtlFreeHeap    | |         | |    RtlpFreeHeap   | |
+| +-----------+ |         | +-----------------+ |         | +-------------------+ |         | +-------------------+ |
++---------------+         +---------------------+         +-----------------------+         +-----------------------+
+                                                                                                       |
+                                                                                                       |
+                                                                                                       v
+                                                                                                 +------------+
+                                                                                                 |   Kernel   |
+                                                                                                 +------------+
+```
+	从使用的角度来看，Win10堆可以分为两种：
+		a. 进程堆：整个进程共享，都可以使用，会存放在_PEB结构中。
+		b. 私有堆：单独创建的，通过HeapCreate返回的句柄hHeap来指定。
+	前17个chunk地址间隔固定，是由Back-End直接分配的；而后面的chunk地址开始变得随机，是由Front-End分配的。也就是说，LFH机制是默认开启的，且只有在分配第18个chunk的时候才会开始启用。
+	LFH(Low-fragmentation Heap), 低碎片化堆，系统根据需要使用低碎片堆（LFH）来对内存分配的请求提供服务。应用程序并不需要启用LFH堆。帮助减少堆碎片。
+## Back-End
+### heap结构 _HEAP
+	每个HEAP有一个HEAP结构，一个heap结构有多个heap_segment。
+	_HEAP结构体作为一个堆管理结构体，存放着许多的metadata，存在于每个堆的开头。其中一些在利用中比较重要的成员：
+```
+EncodeFlagMask(+0x7C: 4B)：用来标志是否要encode该heap中的chunk头，0x100000表示需要encode（加密状态)。
+Encoding(+0x80: 16B)：用来和chunk头进行xor的cookie。
+VirtualAllocdBlocks(+0x110: 16B)：一个双向链表的dummy head，存放着Flink和Blink，将VirtualAllocate出来的chunk链接起来。
+BlocksIndex(+0x138: 8B)：指向一个_HEAP_LIST_LOOKUP结构（后面会进行介绍）。
+FreeList(+0x138 8B)：一个双向链表的dummy head，同样存放着Flink和Blink，将所有的freed chunk给链起来，可以类比于linux ptmalloc下的unsorted bin进行理解；不同的是，它是有序的。
+FrontEndHeap(+0x198: 8B)：指向管理Front-End heap的结构体。
+FrontEndHeapUsageData(+0x1a8: 8B)：指向一个对应各个大小chunk的数组，该数组记录各种大小chunk使用的次数，达到一定数值的时候就会启用Front-End。
+SegmentList(+0x0a4) 堆段的链表，前向指针指向0号堆段，后向指针指向最后一个堆段；
+```
+### heap Entry结构 _HEAP_ENTRY
+	Heap Entry类似于linux下的chunk, 在Win10下就是_HEAP_ENTRY。
+	前八个字节保存结构信息，类似chunk头，但是windows为了安全性，对前八个字节进行了加密。
+		a. 加密方式：与_HEAP结构0x50偏移处八个字节（Encoding）异或（ps：此处HEAP 结构先理解为arena），可以有效防止堆溢出。
+		b. * 0-1 bytes : size; 
+		   * 2 byte : Flags; 
+			   * 0×01 该块处于占用状态；判断是否是free。
+			   * 0×02 该块存在额外描述
+			   * 0×04 使用固定模式填充堆块
+			   * 0×08 虚拟分配
+			   * 0×10 该段最后一个堆块
+		   * 3 byte : SmallTagIndex = 前三字节的异或结果（解密后校验等式）; 用于检测堆有效性的cookie，防止off-by-one单字节修改。
+		   * 4-5 bytes : PreviousSize;
+		   * 6 byte : LFHFlags; 堆块所在段的序号，未验证。
+		   * 7 byte : UnusedBytes; 未用到的字节，如分配出来的堆块头部及最后的16字节填充未使用，故第八字节为0x18。
+	还有其它重要的成员：
+		a. PreviousBlockPrivateData(+0x0: 8B)：由于需要对齐0x10，所以这个地方存放的基本上是前一个堆块的数据，和linux ptmalloc类似，只是处于free状态的时候不会作为prev_size使用。
+		b. SegmentOffset(+0xE: 1B)：某些情况下用来找segment。
+	另外，用户数据区域在inuse的时候可以进行读写，在freed的时候存放Flink和Blink分别指向前一个和后一个freed chunk；与linux ptmalloc不同的是，这里Flink和Blink指向不是chunk头，而是数据区域。
+### _HEAP_VIRTUAL_ALLOC_ENTRY
+	维护通过VirtualAlloc分配出来的chunk，可以类比linux ptmalloc中的mmap chunk, 其中一些比较重要的成员：
+		a. Entry(+0x0: 16B)：链表的Flink和Blink，分别指向上一个和下一个通过VirtualAlloc分配出来的chunk。
+		b. BusyBlock(+0x30: 8B)：与普通的_HEAP_ENTRY头基本一样，不同在于这里的Size是没有使用的size，储存时也没有进行size >> 4的操作，UnusedBytes恒为4。
+### _HEAP_LIST_LOOKUP
+	_HEAP中BlocksIndex指向的结构体，方便快速寻找到合适的chunk。
+### free chunk 的管理
+```
++-----------------------+                     BlocksIndex                                 +----------------------+
+|000001...1...1000000000|   +----------->+-------------------+                            | PreviousBlockPrivate |         
++-----------------------+   |            |        ...        |                            +----------------------+
+           ^                |            +-------------------+                            |  Chunk header (0x70) |
+           |                             |     ListHead      |-----+  +------------------>+----------------------+
+           +--------+       |            +-------------------+     |  |                   |         Flink        |----+
+       _HEAP        +-------+------------|  ListsInUseUlong  |--+  |  |                   +----------------------+    |
++------------------+        |            +-------------------+  |  |  |           +-------|         Blink        |    |
+|        ...       |        |            |     ListHint      |  |  |  |           |  +--->+----------------------+    |
++------------------+        |            +-------------------+  |  |  |           |  |    |          ...         |    |
+|  EncodeFlagMask  |        |                  +----------------+--+  |           |  |    +----------------------+    |
++------------------+        |                  |                |     |           |  |                                |
+|     Encoding     |        |                  V                |     |           |  |    +----------------------+    |
++------------------+        |   +------->+-----------+<---------+-----|-----------+  |    | PreviousBlockPrivate |    |
+|        ...       |        |   |        |   Flink   |          |     |              |    +----------------------+
++------------------+        |   |        +-----------+          |     |              |    | Chunk header (0x110) |    |
+|   BlocksIndex    |--------+   |        |   Blink   |          |     |     +--------+--->+----------------------+<---+  
++------------------+            |     +->+-----------+<---------+-----|-----|-----+  |    |         Flink        |----+
+|        ...       |            |     |        +----------------+     |     |     |  |    +----------------------+    |
++------------------+------------+     |        |                      |     |     |  +----|         Blink        |    |     
+|     FreeList     |                  |        V                      |     |     |  +--->+----------------------+    |
++------------------+------------------+  +-----------+                |     |     |  |    |          ...         |    |
+|        ...       |                     |    ...    |                |     |     |  |    +----------------------+    |
++------------------+                     +-----------+                |     |     |  |                                |
+                              ListHint[7]|   Flink   |----------------+     |     |  |    +----------------------+    |
+                                         +-----------+                      |     |  |    | PreviousBlockPrivate |    |
+                                         |    ...    |                      |     |  |    +----------------------+    |      
+                                         +-----------+                      |     |  |    | Chunk header (0x160) |    |
+                             ListHint[17]|   Flink   |----------------------+  +--+--+--->+----------------------+<---+
+                                         +-----------+                         |  |  |    |         Flink        |----+
+                                         |    ...    |                         |  |  |    +----------------------+    |
+                                         +-----------+                         |  |  +----|         Blink        |    |
+                             ListHint[22]|   Flink   |-------------------------+  |       +----------------------+    |
+                                         +-----------+                            |       |          ...         |    |
+                                         |    ...    |                            |       +----------------------+    |
+                                         +-----------+                            +-----------------------------------+
+```
+### 分配机制
+#### heap function
+	* HeapCreate
+		HANDLE HeapCreate(DWORD flOptions ，DWORD dwInitialSize ， DWORD dwMaxmumSize)；
+		创建一个只有调用进程才能访问的私有堆。进程从虚拟地址空间里保留出一个连续的块，并且为这个块特定的初始部分分配物理空间。
+	* HeapAlloc
+		LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
+		从堆中分配空间。
+	* HeapFree
+#### Allocate (RtlpAllocateHeap)
+	根据size分为三种情况:
+	1. size <= 0x4000
+		基本都会通过RtlpAllocateHeap进行分配：
+			a. 首先会看该size对应的FrontEndHeapStatusBitmap是否有启用LFH：
+				i. 如果没有则在对应的FrontEndHeapUsageData += 0x21。
+				ii. 如果FrontEndHeapUsageData > 0xff00 || FrontEndHeapUsageData & 0x1f > 0x10，那么启用LFH。
+			b. 接下来会查看对应的ListHint中是否有值（也就是否有对应size的freed chunk）：
+				i. 如果刚好有值，就检查该chunk的Flink是否是同样size的chunk：
+					* 若是则将Flink写到对应的ListHint中。
+					* 若否则清空对应ListHint，并最后将该chunk从Freelist中unlink出来。
+				ii. 如果对应的ListHint中本身就没有值，就从比较大的ListHint中找：
+					* 如果找到了，就以上述同样的方式处理该ListLink，并unlink该chunk，之后对其进行切割，剩下的重新放入Freelist，如果可以放进ListHint就会放进去，再encode header。
+					* 如果没较大的ListHint也都是空的，那么尝试ExtendedHeap加大堆空间，再从extend出来的chunk拿，接着一样切割，放回ListHIint，encode header。
+				iii. 最后将分配到的chunk返回给用户。
+	2. 0x4000 < size <= 0xff000
+		除了没有LFH相关操作外，其余都和第一种情况一样。
+	3. size >= 0xff000
+		直接调用ZwAllocateVirtualMemroy进行分配，类似于linux下的mmap直接给一大块地址，并且插入_HEAP->VirtualAllocdBlocks中。
+#### Free (RtlpFreeHeap)
+	根据size分为两种情况：
+	1. size <= 0xff000
+		a. 首先会检查地址对齐0x10，并通过unused bytes判断该chunk的状态（为0则是free状态，反之则为inuse状态）。
+		b. 如果LFH未开启，会将对应的FrontEndHeapUsageData -= 1（并不是0x21）。
+		c. 接着判断前后的chunk是否是freed的状态，如果是的话就将前后的freed chunk从Freelist中unlink下来（与上面的方式一样更新ListHint），再进行合并。
+		d. 合并完之后更新Size和PreviousSize，然后查看是不是最前跟最后，是就插入，否则就从ListHint中插入，并且update ListHint；插入时也会对Freelist进行检查（但是此检查不会触发abort，原因在于没有做unlink写入）。
+	2. size > 0xff000
+		a. 检查该chunk的linked list并从_HEAP->VirtualAllocdBlocks中移除，接着使用RtlpSecMemFreeVirtualMemory将chunk整个munmap掉。
+## Front-End
+### _LFH_HEAP
+	管理Front-End heap的结构体。
+	其中比较重要的成员：
+		a. Buckets(+0x2A4: 4B * 129)：一个存放129个_HEAP_BUCKET结构体的数组（_HEAP_BUCKET后面会分析），用来寻找配置大小对应到Block大小的阵列结构。
+		b. SegmentInfoArrays(+0x4A8: 8B * 129)：一个存放129个_HEAP_LOCAL_SEGMENT_INFO结构体指针的数组（_HEAP_LOCAL_SEGMENT_INFO后面会分析），不同大小对应到不同的_HEAP_LOCAL_SEGMENT_INFO结构体，主要管理对应到的_HEAP_SUBSEGMENT的信息。
+		c. LocalData：一个_HEAP_LOCAL_DATA结构体。
+#### 整个LFH的结构布局
+```
+                                                                                                                         _HEAP_USERDATA_HEADER 
+                                                                                                                    +-->+---------------------+
+                                                                                                                    |   |      SubSegment     |
+         _HEAP                                                   _HEAP_BUCKET                                       |   +---------------------+
++---------------------+                               +---->+---------------------+                                 |   |         ...         |
+|         ...         |                               |     |      BlockUnits     |                                 |   +---------------------+
++---------------------+              _LFH_HEAP        |     +---------------------+          _HEAP_SUBSEGMENT       |   |    EncodedOffsets   |
+|    EncodeFlagMask   |   +-->+---------------------+ |     |       SizeIndex     |    +->+---------------------+   |   +---------------------+
++---------------------+   |   |         ...         | |     +---------------------+  +-+--|      LocalInfo      |   |   |      BusyBitmap     |
+|       Encoding      |   |   +---------------------+ |     |         ...         |  | |  +---------------------+   |   +---------------------+
++---------------------+   |   |        Heap         | | +-->+---------------------+  | |  |      UserBlocks     |---+   |         ...         |
+|         ...         |   |   +---------------------+ | |                            | |  +---------------------+       +---------------------+
++---------------------+   |   |         ...         | | |                            | |  |         ...         |       |     chunk header    |
+|     BlocksIndex     |   |   +---------------------+-+ |                            | |  +---------------------+----+  +---------------------+
++---------------------+   |   |      Buckets[0]     |   |                            | |  |    AggregateExchg   |    |  |         ...         |
+|         ...         |   |   +---------------------+---+   _HEAP_LOCAL_SEGMENT_INFO | |  +---------------------+--+ |  +---------------------+
++---------------------+   |   |         ...         |   +-->+---------------------+  | |  |      BlockSize      |  | |  |     chunk header    |
+|       FreeList      |   |   +---------------------+   | +-|      LocalData      |<-+ |  +---------------------+  | |  +---------------------+
++---------------------+   |   | SegmentInfoArray[x] |---+ | +---------------------+    |  |      BlockCount     |  | |  |         ...         |
+|         ...         |   |   +---------------------+     | |   ActiveSubsegment  |----+  +---------------------+  | |  +---------------------+
++---------------------+   |   |         ...         |     | +---------------------+       |         ...         |  | |  |     chunk header    |
+|     FrontEndHeap    |---+   +---------------------+     | |     CachedItems     |       +---------------------+  | |  +---------------------+
++---------------------+       |      LocalData      |<----+ +---------------------+       |      SizeIndex      |  | |  |         ...         |
+|         ...         |       +---------------------+       |         ...         |       +---------------------+  | |  +---------------------+
++---------------------+       |         ...         |       +---------------------+       |         ...         |  | |  
+|FrontEndHeapUsageData|       +---------------------+       |     BucketIndex     |       +---------------------+  | |       _INTERLOCK_SEQ
++---------------------+                                     +---------------------+                                | +->+---------------------+
+|         ...         |                                     |         ...         |                                |    |        Depth        |
++---------------------+                                     +---------------------+                                |    +---------------------+
+                                                                                                                   |    |    Hint(15 bits)    |
+                                                                                                                   |    +---------------------+
+                                                                                                                   |    |     Lock(1 bit)     |
+                                                                                                                   +--->+---------------------+
+```
+### _HEAP_BUCKET
+### _HEAP_LOCAL_SEGMENT_INFO
+	一些比较重要的成员：
+		a. ActiveSubsegment(+0x8: 8B)：非常重要的成员，一个_HEAP_SUBSEGMENT结构体指针，目的在于管理UserBlocks，记录剩余等多chunk、该UserBlocks最大分配数等信息。
+### _HEAP_SUBSEGMENT
+	一些比较重要的成员：
+		a. UserBlocks(+0x8: 8B)：一个指向_HEAP_USERDATA_HEADER结构的指针（后面会对_HEAP_USERDATA_HEADER进行分析），也就是指向LFH chunk的内存分配池。该内存分配池包括一个_HEAP_USERDATA_HEADER，存放一些metatdata；紧跟着后面会有要分配出去的所有chunk。
+### _INTERLOCK_SEQ
+### _HEAP_USERDATA_HEADER
+	一些比较重要的成员：
+		a. EncodedOffsets(+0x18: 8B)：一个_HEAP_USERDATA_OFFSETS结构，用来验证chunk header是否被改过。
+		b. BusyBitmap(+0x20: 10B)：记录该UserBlocks哪些chunk被使用了。
+### _HEAP_ENTRY
+### 分配机制
+## exploitation
+	相比较linux的堆漏洞利用，windows要多出一步信息泄露。
+### Unlink利用
+	虽然Windows下对freed chunk的管理比较复杂，但是unlink原理和linux ptmalloc十分类似，所以利用方法也是共通的。[3]
+	主要有两点不同：
+		a. 进行decode header然后进行完整性check的时候，需要保证其正确性，比如找到previous/next freed chunk，进行decode以及完整性check的操作的时候。
+		b. windows下chunk的Flink和Blink直接指向数据区域而不是chunk header。
+	整体的利用思路为：
+		a. 在已知linux下unlink attack的基础上，以完全相同的方式，对windows heap进行unlink attack，可以实现将一个指针指向本身的效果。
+		b. 利用这个指向自身的指针，我们可以控制周围的可能的指针，达到任意地址读写的效果。
+		c. 不同于linux下的利用，windows下似乎不存在各种hook函数可以覆盖从而控制程序的执行流，所以只存在两条路，一是ROP，二是写shellcode。
+		d. 不论如何，首先需要的是leak出text，各种dll，以及stack地址。
+		f. 后面就可以覆盖返回地址做ROP，调VirtualProtect获得执行权限，然后jump到shellcode执行。（个人认为如果可以的话，也能修复Freelist的双向链表，然后ROP直接执行system("cmd.exe")）
+### Reuse attack for LFH
+	假如我们拥有UAF的漏洞可以利用，但是因为LFH分配的随机性，我们无法预测下一个那到的chunk是在哪个位置，也就是说现在我们free的chunk，下一次malloc不一定拿得到。
+	那么此时可以通过填满UserBlocks的方式，再free掉目标chunk，这样下一次malloc就必然会拿到目标chunk（因为只剩下一个），然后可以利用这个特性构造chunk overlap做进一步利用, 这是一种利用思路。
+## reference
+- [1] https://n0nop.com/2021/04/15/Learning-Windows-pwn-Nt-Heap/#HEAP-VIRTUAL-ALLOC-ENTRY : windows heap 简介
+- [2] https://www.slideshare.net/AngelBoy1/windows-10-nt-heap-exploitation-chinese-version ： AngelBoy1的ppt
+- [3] https://zhuanlan.zhihu.com/p/44456002 ： unlink利用攻击

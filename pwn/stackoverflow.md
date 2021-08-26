@@ -1,4 +1,4 @@
-# ROP:  
+# linux ROP:  
 	当开启了NX时，可考虑ROP.
 	填充空间方法： 1> ida ; 2> gdb.  canary found是，触发check_failed(),ROP失效。  
 
@@ -172,6 +172,40 @@ def csu(rbx, rbp, r12, r13, r14, r15, last):
 ### reference
 - https://www.anquanke.com/post/id/205858 ： 解释性文章
 
+## ret2dlresolve
+	linux程序使用 _dl_runtime_resolve(link_map_obj, reloc_offset) 来对动态链接的函数进行重定位。
+	ret2dlresolve 攻击的核心：如果我们可以控制相应的参数及其对应地址的内容就可以控制解析的函数。
+	具体的，动态链接器在解析符号地址时所使用的重定位表项、动态符号表、动态字符串表都是从目标文件中的动态节 .dynamic 索引得到的。因此，如果我们能够修改其中的某些内容使得最后动态链接器解析的符号是我们想要解析的符号，那么攻击就达成了。
+	* 思路1 - 直接控制重定位表项的相关内容
+	动态链接器最后在解析符号的地址时，是依据符号的名字进行解析的。因此，一个想法是直接修改动态字符串表 .dynstr。 但是，动态字符串表和代码映射在一起，是只读的。所以这个方法很难实现。
+	* 思路2 - 间接控制重定位表项的相关内容
+	我们可以修改 .dynamic 动态节中的内容，从而控制解析的函数。
+	例如，对于 NO RELEO的程序, .dynamic节是可读写的。
+		1. 首先修改 .dynamic 节中字符串表的地址为伪造的地址
+		2. 在伪造的地址处构造好字符串表，将 read 字符串替换为 system 字符串。
+		3. 在特定的位置读取 /bin/sh 字符串。
+		4. 调用 read 函数的 plt 的第二条指令，触发 _dl_runtime_resolve 进行函数解析，从而执行 system 函数。
+	* 思路3 - 伪造 link_map
+	动态连接器在解析符号地址时，主要依赖于 link_map 来查询相关的地址。因此，如果我们可以成功伪造 link_map，也就可以控制程序执行目标函数。
+	例如，对于 Partial RELRO 的程序，.dynamic节是只读的。这时我们可以通过伪造重定位表项的方式来调用目标函数。
+	对于 FULL RELRO 的程序，程序中导入的函数地址会在程序开始执行之前被解析完毕。此时，直接使用上面的技巧是不行的。
+	对于 32 bit的程序，这种攻击往往有效。
+### pwntools 工具的实现
+	模板如下。
+```py
+context.binary = elf = ELF("./main_partial_relro_32")
+rop = ROP(context.binary)
+dlresolve = Ret2dlresolvePayload(elf,symbol="system",args=["/bin/sh"])
+# pwntools will help us choose a proper addr, NO PIE 或者 知道程序段地址
+rop.read(0,dlresolve.data_addr)
+rop.ret2dlresolve(dlresolve)
+raw_rop = rop.chain()
+print(rop.dump())
+print(hex(dlresolve.data_addr))
+# 接下来根据rop.dump()的结果构造ret处的payload，并将其进行执行
+# 最后, 发送 dlresolve.payload。
+```
+
 ---
 ## usable gadget
 	1. rdi可控时。
@@ -257,8 +291,34 @@ canary 设计为以0x00结尾，为了保证截断字符串。
 ---
 ## ASLR
 	堆、栈、共享库的地址随机化。
+	a. 同一个模块内，代码段和数据段之间的距离确定，不受随机化影响。
+	b. 同一动态库内，每个函数在动态库内部的偏移量是确定的。
 ### 绕过技术
 	1. 利用其它未随机化的代码或数据，例如未开启PIE程序的数据段和代码段 或 vsyscall段。
+	2. 信息泄露。
+	3. 对于32bit，libc基址/栈/堆只有一个字节是随机化，后三字节得满足1kb内存对齐。
+	4. syscall + gadget + ROP。
+	5. 对于栈地址随机化的绕过，栈迁移。
+
+## VDSO
+	Virtual Dynamically-linked Shared Object。
+	具体来说，它是将内核态的调用映射到用户地址空间的库，因为有些系统调用经常被用户使用，这就会出现大量的用户态与内核态切换的开销。通过 vdso，我们可以大量减少这样的开销，同时也可以使得我们的路径更好。这里路径更好指的是，我们不需要使用传统的 int 0x80 / syscall 来进行系统调用，不同的处理器实现了不同的快速系统调用指令。
+	* intel 实现了 sysenter，sysexit
+	* amd 实现了 syscall，sysret
+	当不同的处理器架构实现了不同的指令时，自然就会出现兼容性问题，所以 linux 实现了 vsyscall 接口，在底层会根据具体的结构来进行具体操作。而 vsyscall 就实现在 vdso 中。
+	对于 vsyscall:
+		分配的内存较小；	
+		只允许4个系统调用；
+		Vsyscall页面在每个进程中是静态分配了相同的地址。
+	对于vdso：
+		提供和vsyscall相同的功能，同时解决了其局限；
+		vDSO是动态分配的，地址是随机的；
+		可以提供超过4个系统调用；
+		vDSO是glibc库提供的功能。
+		
+### 32 bit
+	VDSO ASLR在其他部分比ASLR弱（熵通常只有1个字节），并且可以结合一个著名的利用方法，Sigreturn Oriented Programming（SROP），后三个位是gadget偏移。
+	这意味着我们可以通过执行 256 次蛮力来找到 syscall/ int 0x80 / sigreturn syscall。 [0xf77**000, 0xf77**000]。 而对于64bit，这个方法不能时间效率过高。
 
 ## PIE
 	text,rodata,bss段地址随机化。
@@ -314,8 +374,6 @@ else:
 #### compilation
 	gcc使用-march=armv8.3a -mbranch-protection=pac-ret。
 #### sample use cases
-	
-
 #### reference
 - https://www.qualcomm.com/media/documents/files/whitepaper-pointer-authentication-on-armv8-3.pdf : 详解
 - https://googleprojectzero.blogspot.com/2019/02/examining-pointer-authentication-on.html : 例子
@@ -323,3 +381,40 @@ else:
 ## other
 - red zone: %rsp指向的栈顶之后的128字节是被保留的 -> 叶子函数可能使用这块空间,不额外申请空间。
 - rbp是当前栈帧的栈底。[rbp]是上一个栈帧的栈顶，因为push rbp;rbp=rsp。
+
+# windows ROP
+## SEH（Structured Exception Handling)
+	用于一致地处理硬件和软件异常。该结构通常表示为 try / except 或 try / catch 代码块。
+	不论在何处定义异常处理程序（应用程序与操作系统），还是设计异常处理程序的类型，所有处理程序均由 Windows SEH 通过指定数据结构和函数的集合进行集中统一管理。
+### SEH 的主要组成部分
+	对于每个异常处理程序，都有一个 Exception Registration Record 结构，如下所示：
+	这些 Exception Registration Record 使用链表的结构连接在一起 。其中的第一个字段（Next）是指向 SEH 链中下一个 _EXCEPTION_REGISTRATION_RECORD 的指针；第二个字段（Handler）是指向异常处理函数的指针。
+```c
+EXCEPTION_DISPOSITION 
+__cdecl _except_handler(
+	// 该结构包含有关给定异常的信息，包括异常代码，异常地址和参数数量。
+    struct _EXCEPTION_RECORD *ExceptionRecord, 
+    oid EstablisherFrame,
+    struct _CONTEXT *ContextRecord,
+    void * DispatcherContext
+);
+```
+	_except_handler 函数使用这些信息，以确定异常是否可以由当前异常处理函数处理，或者它需要移交到下一个 Exception Registration Record 进行处理。
+### 特点
+	1. SEH结构体放在栈中
+	2. 当线程初始化时，会自动向栈中安装一个SEH，作为线程默认的异常处理
+	3. 如果程序源代码中使用try{}except{}或者Assert宏等异常处理机制，编译器将最终将通过向当前函数栈帧中安装一个SEH来实现异常处理
+	4. 栈中一般会同时存在多个SEH
+	5. 栈中的多个SEH通过链表指针在栈内由栈顶向栈底串成单项链表，位于链表最顶端的SEH通过TEB(线程环境块)0字节偏移处的指针标识。
+	6. 当异常发生时，操作系统会中断程序，并首先从TEB的0字节偏移处取出距离栈顶最近的SEH，使用异常处理函数句柄所指向的代码来处理异常。
+	7. 当离“事故现场”最近的异常处理函数运行失效时，将顺着SEH链表依次尝试其他的异常处理函数。
+	8. 如果程序安装的所有异常处理函数都不能处理，系统将采用默认的异常处理函数。通过这个函数弹出一个对话框，然后强制关闭程序。
+### exploitation
+	在 SEH 下，直接覆盖 SEH_Handler 指针字段(一般用shellcode_addr)，然后触发异常后，就可以直接控制程序的执行流。
+## 漏洞复现
+### CVE-2020-0796（永恒之黑）
+	Microsoft服务器消息块（SMB）协议是Microsoft Windows中使用的一项Microsoft网络文件共享协议。
+	在大部分windows系统中都是默认开启的，用于在计算机间共享文件、打印机等。Windows 10和Windows Server 2016引入了SMB 3.1.1 。
+	本次漏洞源于SMBv3没有正确处理压缩的数据包，在解压数据包的时候使用客户端传过来的长度进行解压时，并没有检查长度是否合法，最终导致整数溢出。
+	利用该漏洞，黑客可直接远程攻击SMB服务端远程执行任意恶意代码，亦可通过构建恶意SMB服务端诱导客户端连接从而大规模攻击客户端。
+	利用msf生成exp反弹shell。

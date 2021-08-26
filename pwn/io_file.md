@@ -106,6 +106,13 @@ void * funcs[] = {
 ## printf/puts
   printf和puts是常用的输出函数，在printf的参数是以'\n'结束的纯字符串时，printf会被优化为puts函数并去除换行符。
   puts在源码中实现的函数是_IO_puts，这个函数的操作与fwrite的流程大致相同，函数内部同样会调用vtable中的_IO_sputn，结果会执行_IO_new_file_xsputn，最后会调用到系统接口write函数。
+## 更改缓冲类型的函数，例如setbuf、setbuffer、setlinebuf、setvbuf等
+  一些默认的缓冲类型，例如：
+  	a. 指向终端设备的流是行缓冲的
+  	b. 标准错误是不带缓冲的
+  	c. 指向文件的流是全缓冲的
+  	d. ...
+  	如果没有缓冲区，会直接显示在屏幕上。
 
 # 伪造vtable劫持程序流程
   **伪造vtable劫持程序流程**的中心思想就是针对_IO_FILE_plus的vtable动手脚，通过把vtable指向我们控制的内存，并在其中布置函数指针来实现。

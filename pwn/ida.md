@@ -11,7 +11,8 @@
 - ctrl+alt+k 修改汇编，打patch,再点击edit应用patch到input file.  
 - tab 切换反编译窗口和汇编窗口
 - shift + E 导出数据
-- packer + apply patches to input file : 修改二进制文件
+- packer in keypatch + apply patches to input file : 修改二进制文件
+- alt + k : 
 
 ## 识别汇编中的C代码结构
 ### 反汇编数组
@@ -83,3 +84,9 @@ mov byte ptr [eax+14h], 61h # 14h处是字符类型
 ## other
 ### 修改数据类型
 	点击数据类型，然后按d修改数据格式，然后右键，可以选择array，转换成数组。
+### bugs
+#### Decompilation failure: positive sp value has been found
+	堆栈不平衡导致不可以F5的问题.
+	解决办法：
+	1. Options -->General--->把Stack pointer勾选上。
+	2. 鼠标点击最近的call   快捷键Alt+K   输入相应的值   使得下面的retn前面为0。

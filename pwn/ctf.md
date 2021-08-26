@@ -9,8 +9,9 @@
 - recvline(keepends=True) : 接收一行，keepends为是否保留行尾的\n。
 - recv(byte_num)
 - recvuntil(str)
-- p = process(["/path/to/ld.so", "./test"], env={"LD_PRELOAD":"/path/to/libc.so.6"}) : 本地运行
+- p = process(["/path/to/ld.so", "./test"], env={"LD_PRELOAD":"/path/to/libc.so.6"}) : 本地运行。注意ld要有执行权限。
 - b64e/b64d(str)  : base64加解密。
+- raw_input(">") ： 解决 sleep 同步问题。
 
 ### python3
 	bytes2str: bytes.decode(bytes, encoding='iso8859-1') or b''
@@ -31,6 +32,16 @@
 - 同理有LOWORD(), HIWORD()。
 
 ---
+## pwninit 
+	自动化的获取libc、ld，patchelf，生成exp模板。
+```
+	# 安装
+	$ cargo install pwninit
+	
+	# 使用
+	$ 切换到二进制目录。
+	$ pwninit
+```
 ## checksec
 	* NX(no-execute)保护：堆栈内代码不可执行,是在硬件上实现的,可考虑ROP。  
 	* canary found是，触发check_failed(),ROP失效。 可以写超出当前ebp的范围. 触发*** stack smashing detected ***  
@@ -89,6 +100,7 @@
 - shutdown('write') ： 关闭输入流。
 - disasm(bytes) : 反汇编二进制指令流。 基于capstone实现的。
 - asm(shellcode_str, arch='', os='linux')
+- pwnlib.shellcraft.amd64 package 有支持多条汇编指令的函数，返回汇编代码。
     
 ## linux 延迟绑定PLT  
 	动态链接器需要某个函数来完成地址绑定工作，这个函数至少要知道这个地址绑定发生在哪个模块 哪个函数，如lookup(module,function)。  
@@ -276,6 +288,8 @@ obj.dump("__libc_start_main_ret")
         cat list
     3. # 下载列表中的版本
         ./download_old 2.24-3ubuntu2.2_amd64（与列表中名称一致）
+#### other way to donwload ld
+	在网上下载现成的 ld ： koji.fedoraproject.com
 
 ## heap
 	对于非菜单题，需要抽象出 add, free, show ,edit等函数。        
@@ -321,11 +335,29 @@ obj.dump("__libc_start_main_ret")
 - 控制程序流，多调用几次相同函数，有意想不到的结果 (multi-staged exploit)。
 - 错误码可以去 /usr/include 下搜索。
 - 流关闭一次后就再也无法重新打开了。 close输入流后，可以使用pipe进行输入。
-- 若无法使用打印flag的函数，则需要爆破
-	- 可以使用shellcode来比较字符进而爆破flag ： 参考 2020蓝帽杯线下赛 slient
+- 爆破
+	- 若无法使用打印flag的函数，则需要爆破
+		- 可以使用shellcode来比较字符进而爆破flag ： 参考 2020蓝帽杯线下赛 slient
+	- 由 堆地址ALSR 导致的程序崩溃，可以爆破，总会遇到一个正常的。
+- 大致浏览程序。可以猜测功能，再调试。 不用把程序都弄清楚。
+- 对于未开 NX 的程序，shellcode, got表，jmp near ptr tag 很有用。
+- 菜单题中的index，往往可以越界信息泄露。
+- 如果shellcode被禁用了一些字符，可以使用 xor 获取一些被禁用的指令。
+- 拟态防御：基于动态异构冗余构造一体化技术架构集约化地实现对未知威胁的防御。
+	- 一种实现：使用不同的架构实现同一个程序。运行的时候，同时执行程序的多个实现，如果其中个程序奔溃或者多个实现的输出不一致，则所有程序直接挂掉。 
 
-### refrence
+
+### reference
 - https://www.cnblogs.com/crybaby/p/13294562.html#%E6%B3%84%E9%9C%B2%E6%A0%88%E5%9C%B0%E5%9D%80 : tips
+
+## vulnerability
+### logic bugs
+	1. 绕过if，不进入正常的流程 -> 导致可利用的信息，信息泄露。
+	2. 过程间分析。 返回到上一层进行free.
+
+### 整数除法下溢漏洞
+	len = (len/4)*3 --> 说明len可以有3个字节的多余。
+
 ## model
 ```python
 from pwn import * 
